@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || !auth || typeof (auth as any).onAuthStateChanged !== 'function') {
       // Automatic fallback to local guest profile so the app works immediately out of the box
       const defaultLocalUser: AppUser = {
         uid: 'local-default-user',
@@ -76,23 +76,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: User | null) => {
-      if (firebaseUser && !firebaseUser.isAnonymous) {
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          isAnonymous: false,
-          photoURL: firebaseUser.photoURL,
-        });
-        setIsDemoMode(false);
-        setLoading(false);
-      } else {
-        setUser(null);
-        setIsDemoMode(false);
-        setLoading(false);
-      }
-    });
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onAuthStateChanged(auth, (firebaseUser: User | null) => {
+        if (firebaseUser && !firebaseUser.isAnonymous) {
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            isAnonymous: false,
+            photoURL: firebaseUser.photoURL,
+          });
+          setIsDemoMode(false);
+          setLoading(false);
+        } else {
+          setUser(null);
+          setIsDemoMode(false);
+          setLoading(false);
+        }
+      });
+    } catch (authErr) {
+      console.warn('onAuthStateChanged subscription error:', authErr);
+      const defaultLocalUser: AppUser = {
+        uid: 'local-default-user',
+        email: 'local@myroutine.local',
+        displayName: 'My Routine User',
+        isAnonymous: true,
+      };
+      setUser(defaultLocalUser);
+      setIsDemoMode(true);
+      setLoading(false);
+    }
 
     return () => unsubscribe();
   }, []);

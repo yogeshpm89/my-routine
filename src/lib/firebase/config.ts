@@ -28,16 +28,6 @@ const firebaseConfig = {
   measurementId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID),
 };
 
-export const isFirebaseConfigured = Boolean(
-  firebaseConfig.apiKey &&
-  !firebaseConfig.apiKey.includes('YOUR_API_KEY') &&
-  !firebaseConfig.apiKey.includes('mock-api-key') &&
-  firebaseConfig.projectId &&
-  !firebaseConfig.projectId.includes('my-routine-dev') &&
-  firebaseConfig.appId &&
-  !firebaseConfig.appId.includes('YOUR_APP_ID')
-);
-
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
@@ -72,9 +62,22 @@ if (!getApps().length) {
 
 try {
   auth = getAuth(app);
-} catch {
-  auth = {} as Auth;
+} catch (e) {
+  console.warn('Firebase getAuth error:', e);
+  auth = null as unknown as Auth;
 }
+
+export const isFirebaseConfigured = Boolean(
+  firebaseConfig.apiKey &&
+  !firebaseConfig.apiKey.includes('YOUR_API_KEY') &&
+  !firebaseConfig.apiKey.includes('mock-api-key') &&
+  firebaseConfig.projectId &&
+  !firebaseConfig.projectId.includes('my-routine-dev') &&
+  firebaseConfig.appId &&
+  !firebaseConfig.appId.includes('YOUR_APP_ID') &&
+  auth &&
+  typeof (auth as any).onAuthStateChanged === 'function'
+);
 
 export function canSyncWithFirestore(userId?: string): boolean {
   if (
