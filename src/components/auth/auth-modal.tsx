@@ -16,6 +16,7 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -89,6 +90,14 @@ export function AuthModal({
     if (code.includes('popup-closed-by-user')) {
       return 'Google sign-in popup was closed.';
     }
+    if (
+      code.includes('missing-initial-state') ||
+      code.includes('sessionStorage') ||
+      String(err?.message || '').toLowerCase().includes('missing initial state') ||
+      String(err?.message || '').toLowerCase().includes('sessionstorage')
+    ) {
+      return 'Google popup sign-in is not supported inside the mobile app. Please sign in or create an account using Email & Password below.';
+    }
     return err?.message || 'Authentication error. Please verify your details.';
   };
 
@@ -134,6 +143,10 @@ export function AuthModal({
   };
 
   const handleGoogleSignIn = async () => {
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      setError('Google popup sign-in is not supported inside the mobile app. Please sign in or create an account using Email & Password below.');
+      return;
+    }
     setError(null);
     setIsLoading(true);
     try {
@@ -264,6 +277,12 @@ export function AuthModal({
               </svg>
               <span>{mode === 'login' ? 'Continue with Google' : 'Sign up with Google'}</span>
             </button>
+
+            {typeof window !== 'undefined' && Capacitor.isNativePlatform() && (
+              <p className="mt-2 text-[11px] text-amber-400/90 text-center">
+                Mobile app: Use Email &amp; Password below for instant cloud sync.
+              </p>
+            )}
 
             <div className="relative my-4 flex items-center justify-center">
               <div className="border-t border-white/10 w-full" />

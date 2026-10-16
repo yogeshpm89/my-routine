@@ -50,6 +50,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
+import { Capacitor } from '@capacitor/core';
 
 export default function RoutineApp() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
@@ -446,10 +447,15 @@ export default function RoutineApp() {
               <button
                 type="button"
                 onClick={async () => {
+                  if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+                    openAuth('login');
+                    return;
+                  }
                   try {
                     await signInWithGoogle();
                   } catch (err) {
                     console.error('Google sign in error:', err);
+                    openAuth('login');
                   }
                 }}
                 className="inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium border border-white/10 transition cursor-pointer"

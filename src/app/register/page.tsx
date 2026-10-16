@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Sparkles,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -39,6 +40,14 @@ export default function RegisterPage() {
     }
     if (code.includes('popup-closed-by-user')) {
       return 'Google sign-in popup was cancelled.';
+    }
+    if (
+      code.includes('missing-initial-state') ||
+      code.includes('sessionStorage') ||
+      String(err?.message || '').toLowerCase().includes('missing initial state') ||
+      String(err?.message || '').toLowerCase().includes('sessionstorage')
+    ) {
+      return 'Google popup sign-in is not supported inside the mobile app. Please create your account with Email & Password below.';
     }
     return err?.message || 'Failed to create account. Please verify your details.';
   };
@@ -70,6 +79,10 @@ export default function RegisterPage() {
   };
 
   const handleGoogle = async () => {
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      setError('Google popup sign-in is not supported inside the mobile app. Please create your account with Email & Password below.');
+      return;
+    }
     setError(null);
     setIsLoading(true);
     try {
@@ -153,6 +166,12 @@ export default function RegisterPage() {
           </svg>
           <span>Sign up with Google</span>
         </button>
+
+        {typeof window !== 'undefined' && Capacitor.isNativePlatform() && (
+          <p className="mt-2 text-[11px] text-amber-400/90 text-center">
+            Mobile app: Use Email &amp; Password below for instant cloud sync.
+          </p>
+        )}
 
         <div className="relative my-5 flex items-center justify-center">
           <div className="border-t border-white/10 w-full" />

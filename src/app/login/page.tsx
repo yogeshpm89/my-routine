@@ -15,6 +15,7 @@ import {
   Sparkles,
   ArrowLeft,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,6 +34,14 @@ export default function LoginPage() {
     }
     if (code.includes('popup-closed-by-user')) {
       return 'Google sign-in popup was cancelled.';
+    }
+    if (
+      code.includes('missing-initial-state') ||
+      code.includes('sessionStorage') ||
+      String(err?.message || '').toLowerCase().includes('missing initial state') ||
+      String(err?.message || '').toLowerCase().includes('sessionstorage')
+    ) {
+      return 'Google popup sign-in is not supported inside the mobile app. Please sign in with Email & Password below.';
     }
     return err?.message || 'Failed to sign in. Please check your credentials.';
   };
@@ -53,6 +62,10 @@ export default function LoginPage() {
   };
 
   const handleGoogle = async () => {
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      setError('Google popup sign-in is not supported inside the mobile app. Please sign in or create an account using Email & Password below.');
+      return;
+    }
     setError(null);
     setIsLoading(true);
     try {
@@ -136,6 +149,12 @@ export default function LoginPage() {
           </svg>
           <span>Continue with Google</span>
         </button>
+
+        {typeof window !== 'undefined' && Capacitor.isNativePlatform() && (
+          <p className="mt-2 text-[11px] text-amber-400/90 text-center">
+            Mobile app: Use Email &amp; Password below for instant cloud sync.
+          </p>
+        )}
 
         <div className="relative my-5 flex items-center justify-center">
           <div className="border-t border-white/10 w-full" />
