@@ -447,10 +447,6 @@ export default function RoutineApp() {
               <button
                 type="button"
                 onClick={async () => {
-                  if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-                    openAuth('login');
-                    return;
-                  }
                   try {
                     await signInWithGoogle();
                   } catch (err) {

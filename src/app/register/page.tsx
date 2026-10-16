@@ -79,10 +79,6 @@ export default function RegisterPage() {
   };
 
   const handleGoogle = async () => {
-    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-      setError('Google popup sign-in is not supported inside the mobile app. Please create your account with Email & Password below.');
-      return;
-    }
     setError(null);
     setIsLoading(true);
     try {

@@ -10,9 +10,11 @@ import {
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   updateProfile,
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { auth, isFirebaseConfigured } from './config';
 
 interface AppUser {
@@ -157,6 +159,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsDemoMode(false);
       return;
     }
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      const result = await FirebaseAuthentication.signInWithGoogle();
+      const idToken = result.credential?.idToken;
+      if (idToken) {
+        const credential = GoogleAuthProvider.credential(idToken);
+        const cred = await signInWithCredential(auth, credential);
+        setUser({
+          uid: cred.user.uid,
+          email: cred.user.email,
+          displayName: cred.user.displayName || cred.user.email?.split('@')[0] || 'Google User',
+          isAnonymous: false,
+          photoURL: cred.user.photoURL,
+        });
+        return;
+      }
+      if (result.user) {
+        setUser({
+          uid: result.user.uid,
+          email: result.user.email || null,
+          displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Google User',
+          isAnonymous: false,
+          photoURL: result.user.photoUrl,
+        });
+        return;
+      }
+    }
+
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     const cred = await signInWithPopup(auth, provider);
@@ -192,6 +222,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     localStorage.removeItem(LOCAL_GUEST_KEY);
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+      try {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        await FirebaseAuthentication.signOut();
+      } catch (e) {
+        console.warn('Native sign out error:', e);
+      }
+    }
     if (isFirebaseConfigured) {
       await firebaseSignOut(auth);
     }

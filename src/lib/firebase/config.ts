@@ -45,17 +45,29 @@ let db: Firestore;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
   try {
-    db = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
-    });
+    if (typeof window !== 'undefined') {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
+    } else {
+      db = getFirestore(app);
+    }
   } catch {
-    db = getFirestore(app);
+    try {
+      db = getFirestore(app);
+    } catch {
+      db = {} as Firestore;
+    }
   }
 } else {
   app = getApp();
-  db = getFirestore(app);
+  try {
+    db = getFirestore(app);
+  } catch {
+    db = {} as Firestore;
+  }
 }
 
 try {

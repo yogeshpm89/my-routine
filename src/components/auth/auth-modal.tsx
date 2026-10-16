@@ -143,10 +143,6 @@ export function AuthModal({
   };
 
   const handleGoogleSignIn = async () => {
-    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-      setError('Google popup sign-in is not supported inside the mobile app. Please sign in or create an account using Email & Password below.');
-      return;
-    }
     setError(null);
     setIsLoading(true);
     try {

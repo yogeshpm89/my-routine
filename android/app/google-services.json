@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "323086149363",
+    "project_id": "my-routine-app-3f631",
+    "storage_bucket": "my-routine-app-3f631.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:323086149363:android:9e45adf975456cc1dfb986",
+        "android_client_info": {
+          "package_name": "com.antigravity.myroutine"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "323086149363-5ci9g0mqqr9vpabhk10neosh40mucvd9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBr91T5yGQMJ9nEuwFZzY2io7xzcp9BIZo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "323086149363-5ci9g0mqqr9vpabhk10neosh40mucvd9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
