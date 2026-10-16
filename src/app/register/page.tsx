@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/firebase/auth-context';
+import { useAuth, getAuthErrorMessage } from '@/lib/firebase/auth-context';
 import {
   Clock,
   Mail,
@@ -30,27 +30,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getCleanErrorMessage = (err: any): string => {
-    const code = err?.code || '';
-    if (code.includes('email-already-in-use')) {
-      return 'An account with this email address already exists. Please log in.';
-    }
-    if (code.includes('weak-password')) {
-      return 'Password should be at least 6 characters long.';
-    }
-    if (code.includes('popup-closed-by-user')) {
-      return 'Google sign-in popup was cancelled.';
-    }
-    if (
-      code.includes('missing-initial-state') ||
-      code.includes('sessionStorage') ||
-      String(err?.message || '').toLowerCase().includes('missing initial state') ||
-      String(err?.message || '').toLowerCase().includes('sessionstorage')
-    ) {
-      return 'Google popup sign-in is not supported inside the mobile app. Please create your account with Email & Password below.';
-    }
-    return err?.message || 'Failed to create account. Please verify your details.';
-  };
+  const getCleanErrorMessage = getAuthErrorMessage;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();

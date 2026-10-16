@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth } from '@/lib/firebase/auth-context';
+import { useAuth, getAuthErrorMessage } from '@/lib/firebase/auth-context';
 import {
   Mail,
   Lock,
@@ -76,30 +76,7 @@ export function AuthModal({
 
   if (!isOpen || !mounted) return null;
 
-  const getCleanErrorMessage = (err: any): string => {
-    const code = err?.code || '';
-    if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
-      return 'Invalid email address or password. Please verify and try again.';
-    }
-    if (code.includes('email-already-in-use')) {
-      return 'This email address is already registered. Please sign in instead.';
-    }
-    if (code.includes('weak-password')) {
-      return 'Password should be at least 6 characters long.';
-    }
-    if (code.includes('popup-closed-by-user')) {
-      return 'Google sign-in popup was closed.';
-    }
-    if (
-      code.includes('missing-initial-state') ||
-      code.includes('sessionStorage') ||
-      String(err?.message || '').toLowerCase().includes('missing initial state') ||
-      String(err?.message || '').toLowerCase().includes('sessionstorage')
-    ) {
-      return 'Google popup sign-in is not supported inside the mobile app. Please sign in or create an account using Email & Password below.';
-    }
-    return err?.message || 'Authentication error. Please verify your details.';
-  };
+  const getCleanErrorMessage = getAuthErrorMessage;
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();

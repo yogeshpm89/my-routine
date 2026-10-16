@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/firebase/auth-context';
+import { useAuth, getAuthErrorMessage } from '@/lib/firebase/auth-context';
 import {
   Clock,
   Mail,
@@ -27,24 +27,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getCleanErrorMessage = (err: any): string => {
-    const code = err?.code || '';
-    if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
-      return 'Invalid email address or password. Please verify and try again.';
-    }
-    if (code.includes('popup-closed-by-user')) {
-      return 'Google sign-in popup was cancelled.';
-    }
-    if (
-      code.includes('missing-initial-state') ||
-      code.includes('sessionStorage') ||
-      String(err?.message || '').toLowerCase().includes('missing initial state') ||
-      String(err?.message || '').toLowerCase().includes('sessionstorage')
-    ) {
-      return 'Google popup sign-in is not supported inside the mobile app. Please sign in with Email & Password below.';
-    }
-    return err?.message || 'Failed to sign in. Please check your credentials.';
-  };
+  const getCleanErrorMessage = getAuthErrorMessage;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

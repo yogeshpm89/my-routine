@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/firebase/auth-context';
+import { useAuth, getAuthErrorMessage } from '@/lib/firebase/auth-context';
 import {
   RoutineTemplate,
   OccurrenceOverride,
@@ -451,6 +451,7 @@ export default function RoutineApp() {
                     await signInWithGoogle();
                   } catch (err) {
                     console.error('Google sign in error:', err);
+                    showToast(getAuthErrorMessage(err));
                     openAuth('login');
                   }
                 }}

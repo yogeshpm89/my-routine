@@ -159,9 +159,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsDemoMode(false);
       return;
     }
-    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+    const isNative = typeof window !== 'undefined' && (
+      Capacitor.isNativePlatform() ||
+      Boolean((window as any).Capacitor?.isNativePlatform?.()) ||
+      Boolean((window as any).androidBridge)
+    );
+
+    if (isNative) {
       const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-      const result = await FirebaseAuthentication.signInWithGoogle();
+      let result;
+      try {
+        result = await FirebaseAuthentication.signInWithGoogle();
+      } catch (nativeErr: any) {
+        console.warn('Credential Manager failed, attempting GoogleSignInClient fallback:', nativeErr);
+        result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
+      }
+
       const idToken = result.credential?.idToken;
       if (idToken) {
         const credential = GoogleAuthProvider.credential(idToken);
@@ -185,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         return;
       }
+      throw new Error('Google Sign-In completed but no user credentials were returned.');
     }
 
     const provider = new GoogleAuthProvider();
@@ -222,7 +236,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     localStorage.removeItem(LOCAL_GUEST_KEY);
-    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+    const isNative = typeof window !== 'undefined' && (
+      Capacitor.isNativePlatform() ||
+      Boolean((window as any).Capacitor?.isNativePlatform?.()) ||
+      Boolean((window as any).androidBridge)
+    );
+    if (isNative) {
       try {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
         await FirebaseAuthentication.signOut();
@@ -263,4 +282,46 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+export function getAuthErrorMessage(err: any): string {
+  const code = String(err?.code || '');
+  const msg = String(err?.message || err || '');
+
+  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
+    return 'Invalid email address or password. Please verify and try again.';
+  }
+  if (code.includes('email-already-in-use')) {
+    return 'This email address is already registered. Please sign in instead.';
+  }
+  if (code.includes('weak-password')) {
+    return 'Password should be at least 6 characters long.';
+  }
+  if (
+    code.includes('popup-closed-by-user') ||
+    code.includes('canceled') ||
+    code.includes('cancelled') ||
+    msg.toLowerCase().includes('cancel') ||
+    msg.includes('12501')
+  ) {
+    return 'Google sign-in was cancelled.';
+  }
+  if (msg.includes('10:') || msg.includes('10 :') || code === '10' || msg.includes('DEVELOPER_ERROR')) {
+    return 'Google Error 10 (Developer Error): Please add SHA-1 (43:84:B7:88:53:2B:97:93:22:AF:4B:6D:9C:0F:A6:72:E4:C4:02:07) in Firebase Console under your Android app.';
+  }
+  if (msg.includes('12500:') || msg.includes('12500 :') || code === '12500' || msg.includes('SIGN_IN_FAILED')) {
+    return 'Google Error 12500: Please ensure a Support Email is set in Firebase Project Settings > General, and Google sign-in is enabled.';
+  }
+  if (msg.includes('7:') || msg.includes('7 :') || code === '7' || msg.toLowerCase().includes('network_error')) {
+    return 'Network error during Google sign-in. Please check your internet connection.';
+  }
+  if (
+    code.includes('missing-initial-state') ||
+    code.includes('sessionStorage') ||
+    msg.toLowerCase().includes('missing initial state') ||
+    msg.toLowerCase().includes('sessionstorage')
+  ) {
+    return 'Google popup sign-in is not supported inside the mobile app. Please sign in or create an account using Email & Password below.';
+  }
+  return msg || 'Authentication error. Please verify your details.';
 }

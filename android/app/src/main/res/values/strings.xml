@@ -4,4 +4,6 @@
     <string name="title_activity_main">My Routine</string>
     <string name="package_name">com.antigravity.myroutine</string>
     <string name="custom_url_scheme">com.antigravity.myroutine</string>
+    <string name="default_web_client_id" translatable="false">323086149363-5ci9g0mqqr9vpabhk10neosh40mucvd9.apps.googleusercontent.com</string>
+    <string name="server_client_id" translatable="false">323086149363-5ci9g0mqqr9vpabhk10neosh40mucvd9.apps.googleusercontent.com</string>
 </resources>
