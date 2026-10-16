@@ -1,5 +1,5 @@
 import { ActivityLog, ActivityStatus } from '@/types/routine';
-import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
@@ -20,7 +20,19 @@ export class LogRepository {
   static getLocalLogs(userId: string): ActivityLog[] {
     if (typeof window === 'undefined') return [];
     const raw = localStorage.getItem(this.getLocalKey(userId));
-    if (!raw) return [];
+    if (!raw) {
+      const guestRaw = userId !== 'local-default-user' ? localStorage.getItem(this.getLocalKey('local-default-user')) : null;
+      if (guestRaw) {
+        try {
+          const guestLogs = (JSON.parse(guestRaw) as ActivityLog[]).map((l) => ({ ...l, userId }));
+          this.saveLocalLogs(userId, guestLogs);
+          return guestLogs;
+        } catch {
+          // ignore fallback
+        }
+      }
+      return [];
+    }
     try {
       return JSON.parse(raw) as ActivityLog[];
     } catch {
@@ -36,7 +48,7 @@ export class LogRepository {
   static async getLogsForDate(userId: string, date: string): Promise<ActivityLog[]> {
     const local = this.getLocalLogs(userId).filter((l) => l.date === date);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         const logsCol = collection(db, `users/${userId}/logs`);
         const snapshot = await getDocs(query(logsCol, where('date', '==', date)));
@@ -71,7 +83,7 @@ export class LogRepository {
 
     MutationQueue.enqueue(log.userId, 'logs', 'set', log.id, itemToSave);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(log.userId)) {
       try {
         await setDoc(doc(db, `users/${log.userId}/logs`, log.id), itemToSave);
         const q = MutationQueue.getQueue(log.userId);

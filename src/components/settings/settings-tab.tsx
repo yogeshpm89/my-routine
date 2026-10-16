@@ -19,6 +19,7 @@ import {
   Database,
   ShieldCheck,
   Smartphone,
+  CloudUpload,
 } from 'lucide-react';
 
 interface SettingsTabProps {
@@ -56,6 +57,18 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
       onDataReset();
     }
     setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  const handlePushAllToCloud = async () => {
+    setIsSyncing(true);
+    setStatusMessage('Uploading all local templates and goals to Cloud Firestore...');
+    const res = await SyncEngine.pushAllToFirestore(userId);
+    setIsSyncing(false);
+    setStatusMessage(res.message);
+    if (res.success) {
+      onDataReset();
+    }
+    setTimeout(() => setStatusMessage(null), 6000);
   };
 
   const handleExportBackup = () => {
@@ -173,7 +186,30 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
           </div>
         </div>
 
-        <div className="flex justify-end pt-2">
+        {isDemoMode && (
+          <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200 text-xs space-y-1">
+            <div className="flex items-center gap-2 font-semibold text-amber-300">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Firebase Credentials Required in .env.local</span>
+            </div>
+            <p className="text-[11px] text-amber-300/80 leading-relaxed">
+              Your app is currently running in <strong>Offline Guest Mode</strong> because <code>NEXT_PUBLIC_FIREBASE_API_KEY</code> and/or <code>NEXT_PUBLIC_FIREBASE_APP_ID</code> in <code>.env.local</code> are still template placeholders.
+              Paste your actual Web App credentials from the <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline font-semibold text-amber-200 hover:text-white">Firebase Console</a> to sync data to your live Firestore database.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <button
+            onClick={handlePushAllToCloud}
+            disabled={isSyncing}
+            title="Uploads all current local routine templates and daily goals into Cloud Firestore"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-semibold border border-white/10 transition disabled:opacity-50"
+          >
+            <CloudUpload className="w-4 h-4 text-emerald-400" />
+            <span>Upload All to Firestore</span>
+          </button>
+
           <button
             onClick={handleSyncNow}
             disabled={isSyncing}

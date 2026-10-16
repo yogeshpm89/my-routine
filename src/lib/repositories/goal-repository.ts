@@ -1,6 +1,6 @@
 import { GoalTarget } from '@/types/routine';
 import { getInitialGoalTargets } from '@/lib/seed-data';
-import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
@@ -25,6 +25,16 @@ export class GoalRepository {
     }
     const raw = localStorage.getItem(this.getLocalKey(userId));
     if (!raw) {
+      const guestRaw = userId !== 'local-default-user' ? localStorage.getItem(this.getLocalKey('local-default-user')) : null;
+      if (guestRaw) {
+        try {
+          const guestGoals = (JSON.parse(guestRaw) as GoalTarget[]).map((g) => ({ ...g, userId }));
+          this.saveLocalGoals(userId, guestGoals);
+          return guestGoals;
+        } catch {
+          // ignore fallback
+        }
+      }
       const initial = getInitialGoalTargets(userId);
       this.saveLocalGoals(userId, initial);
       return initial;
@@ -44,7 +54,7 @@ export class GoalRepository {
   static async getGoals(userId: string): Promise<GoalTarget[]> {
     const local = this.getLocalGoals(userId);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         const goalsCol = collection(db, `users/${userId}/goals`);
         const snapshot = await getDocs(query(goalsCol, where('isArchived', '==', false)));
@@ -82,7 +92,7 @@ export class GoalRepository {
 
     MutationQueue.enqueue(goal.userId, 'goals', 'set', goal.id, itemToSave);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(goal.userId)) {
       try {
         await setDoc(doc(db, `users/${goal.userId}/goals`, goal.id), itemToSave);
         const q = MutationQueue.getQueue(goal.userId);
@@ -101,7 +111,7 @@ export class GoalRepository {
 
     MutationQueue.enqueue(userId, 'goals', 'delete', goalId);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         await deleteDoc(doc(db, `users/${userId}/goals`, goalId));
         const q = MutationQueue.getQueue(userId);

@@ -1,5 +1,5 @@
 import { NotificationPreferences, NotificationPreferencesSchema } from '@/types/notifications';
-import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore } from '@/lib/firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const PREFS_KEY_PREFIX = 'my_routine_notif_prefs_';
@@ -43,7 +43,7 @@ export class NotificationPreferencesRepository {
   static async getPreferences(userId: string): Promise<NotificationPreferences> {
     const local = this.getLocalPreferences(userId);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         const snap = await getDoc(doc(db, `users/${userId}/settings/notifications`));
         if (snap.exists()) {
@@ -65,7 +65,7 @@ export class NotificationPreferencesRepository {
     const updated = { ...prefs, updatedAt: Date.now() };
     this.saveLocalPreferences(prefs.userId, updated);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(prefs.userId)) {
       try {
         await setDoc(doc(db, `users/${prefs.userId}/settings/notifications`), updated);
       } catch (err) {

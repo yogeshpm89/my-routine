@@ -1,6 +1,6 @@
 import { RoutineTemplate } from '@/types/routine';
 import { getInitialRoutineTemplates } from '@/lib/seed-data';
-import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
@@ -25,6 +25,16 @@ export class RoutineRepository {
     }
     const raw = localStorage.getItem(this.getLocalKey(userId));
     if (!raw) {
+      const guestRaw = userId !== 'local-default-user' ? localStorage.getItem(this.getLocalKey('local-default-user')) : null;
+      if (guestRaw) {
+        try {
+          const guestTemplates = (JSON.parse(guestRaw) as RoutineTemplate[]).map((t) => ({ ...t, userId }));
+          this.saveLocalTemplates(userId, guestTemplates);
+          return guestTemplates;
+        } catch {
+          // ignore fallback
+        }
+      }
       const initial = getInitialRoutineTemplates(userId);
       this.saveLocalTemplates(userId, initial);
       return initial;
@@ -46,7 +56,7 @@ export class RoutineRepository {
     const local = this.getLocalTemplates(userId);
 
     // 2. If Firebase is configured and online, sync from Firestore
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         const templatesCol = collection(db, `users/${userId}/templates`);
         const snapshot = await getDocs(query(templatesCol, where('isArchived', '==', false)));
@@ -86,7 +96,7 @@ export class RoutineRepository {
     // Enqueue mutation for guaranteed offline-first sync
     MutationQueue.enqueue(template.userId, 'templates', 'set', template.id, templateToSave);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(template.userId)) {
       try {
         await setDoc(doc(db, `users/${template.userId}/templates`, template.id), templateToSave);
         // Clear from queue if direct write succeeded
@@ -107,7 +117,7 @@ export class RoutineRepository {
     // Enqueue delete mutation
     MutationQueue.enqueue(userId, 'templates', 'delete', templateId);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         await deleteDoc(doc(db, `users/${userId}/templates`, templateId));
         const q = MutationQueue.getQueue(userId);

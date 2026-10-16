@@ -8,21 +8,34 @@ import {
   persistentMultipleTabManager,
 } from 'firebase/firestore';
 
+function cleanEnv(val?: string): string {
+  if (!val) return '';
+  const trimmed = val.trim();
+  const hashIdx = trimmed.indexOf('#');
+  if (hashIdx > 0 && !trimmed.startsWith('"') && !trimmed.startsWith("'")) {
+    return trimmed.substring(0, hashIdx).trim();
+  }
+  return trimmed.replace(/^["']|["']$/g, '');
+}
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
+  apiKey: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+  authDomain: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+  projectId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+  storageBucket: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  appId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+  measurementId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID),
 };
 
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
-  firebaseConfig.apiKey !== 'mock-api-key-for-dev' &&
+  !firebaseConfig.apiKey.includes('YOUR_API_KEY') &&
+  !firebaseConfig.apiKey.includes('mock-api-key') &&
   firebaseConfig.projectId &&
-  firebaseConfig.projectId !== 'my-routine-dev'
+  !firebaseConfig.projectId.includes('my-routine-dev') &&
+  firebaseConfig.appId &&
+  !firebaseConfig.appId.includes('YOUR_APP_ID')
 );
 
 let app: FirebaseApp;
@@ -49,6 +62,31 @@ try {
   auth = getAuth(app);
 } catch {
   auth = {} as Auth;
+}
+
+export function canSyncWithFirestore(userId?: string): boolean {
+  if (
+    !isFirebaseConfigured ||
+    !db ||
+    !userId ||
+    userId === 'local-default-user' ||
+    userId.startsWith('guest-') ||
+    userId.startsWith('user_')
+  ) {
+    return false;
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return false;
+  }
+  try {
+    return Boolean(
+      auth?.currentUser &&
+      !auth.currentUser.isAnonymous &&
+      auth.currentUser.uid === userId
+    );
+  } catch {
+    return false;
+  }
 }
 
 export { app, auth, db };

@@ -1,5 +1,7 @@
-import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { db, isFirebaseConfigured, canSyncWithFirestore } from '@/lib/firebase/config';
 import { MutationQueue, SyncMutation } from './mutation-queue';
+import { RoutineRepository } from '@/lib/repositories/routine-repository';
+import { GoalRepository } from '@/lib/repositories/goal-repository';
 import {
   doc,
   getDoc,
@@ -67,13 +69,9 @@ export class SyncEngine {
   }
 
   static async syncNow(userId: string): Promise<{ success: boolean; applied: number; conflicts: number }> {
-    if (!isFirebaseConfigured || !db) {
-      return { success: true, applied: 0, conflicts: 0 };
-    }
-
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (!canSyncWithFirestore(userId)) {
       this.notifyListeners(userId);
-      return { success: false, applied: 0, conflicts: 0 };
+      return { success: true, applied: 0, conflicts: 0 };
     }
 
     this.isSyncing = true;
@@ -137,6 +135,50 @@ export class SyncEngine {
     };
   }
 
+  static async pushAllToFirestore(userId: string): Promise<{
+    success: boolean;
+    templatesCount: number;
+    goalsCount: number;
+    message: string;
+  }> {
+    if (!canSyncWithFirestore(userId)) {
+      return {
+        success: false,
+        templatesCount: 0,
+        goalsCount: 0,
+        message: 'Please sign in to your account with Google or Email to sync data to the cloud.',
+      };
+    }
+
+    try {
+      const templates = RoutineRepository.getLocalTemplates(userId);
+      const goals = GoalRepository.getLocalGoals(userId);
+
+      for (const t of templates) {
+        await setDoc(doc(db, `users/${userId}/templates`, t.id), t);
+      }
+
+      for (const g of goals) {
+        await setDoc(doc(db, `users/${userId}/goals`, g.id), g);
+      }
+
+      return {
+        success: true,
+        templatesCount: templates.length,
+        goalsCount: goals.length,
+        message: `Successfully uploaded ${templates.length} routine templates and ${goals.length} goals to Firestore (/users/${userId}/*)!`,
+      };
+    } catch (err: any) {
+      console.error('Failed to push data to Firestore:', err);
+      return {
+        success: false,
+        templatesCount: 0,
+        goalsCount: 0,
+        message: `Upload failed: ${err?.message || 'Check firestore.rules and API credentials.'}`,
+      };
+    }
+  }
+
   static async resolveConflict(
     userId: string,
     conflictId: string,
@@ -147,7 +189,7 @@ export class SyncEngine {
 
     if (resolution === 'keep_local') {
       // Force overwrite remote with local payload
-      if (isFirebaseConfigured && db) {
+      if (canSyncWithFirestore(userId)) {
         const docRef = doc(db, `users/${userId}/${conflict.mutation.collection}`, conflict.mutation.docId);
         await setDoc(docRef, { ...conflict.localData, updatedAt: Date.now() });
       }
@@ -162,7 +204,7 @@ export class SyncEngine {
   }
 
   static startRealtimeListener(userId: string, onRemoteChange: () => void): () => void {
-    if (!isFirebaseConfigured || !db) return () => {};
+    if (!canSyncWithFirestore(userId)) return () => {};
 
     // Clear old subscriptions
     this.stopRealtimeListeners();
@@ -171,11 +213,17 @@ export class SyncEngine {
     collections.forEach((colName) => {
       try {
         const colRef = collection(db, `users/${userId}/${colName}`);
-        const unsub = onSnapshot(colRef, (snapshot) => {
-          if (!snapshot.metadata.hasPendingWrites) {
-            onRemoteChange();
+        const unsub = onSnapshot(
+          colRef,
+          (snapshot) => {
+            if (!snapshot.metadata.hasPendingWrites) {
+              onRemoteChange();
+            }
+          },
+          (err) => {
+            console.warn(`Firestore realtime listener for ${colName} inactive (${err.code}):`, err.message);
           }
-        });
+        );
         this.unsubscribers.push(unsub);
       } catch (err) {
         console.warn(`Realtime listener error for ${colName}:`, err);

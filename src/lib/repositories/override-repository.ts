@@ -1,5 +1,5 @@
 import { OccurrenceOverride } from '@/types/routine';
-import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
@@ -21,7 +21,19 @@ export class OverrideRepository {
   static getLocalOverrides(userId: string): OccurrenceOverride[] {
     if (typeof window === 'undefined') return [];
     const raw = localStorage.getItem(this.getLocalKey(userId));
-    if (!raw) return [];
+    if (!raw) {
+      const guestRaw = userId !== 'local-default-user' ? localStorage.getItem(this.getLocalKey('local-default-user')) : null;
+      if (guestRaw) {
+        try {
+          const guestOverrides = (JSON.parse(guestRaw) as OccurrenceOverride[]).map((o) => ({ ...o, userId }));
+          this.saveLocalOverrides(userId, guestOverrides);
+          return guestOverrides;
+        } catch {
+          // ignore fallback
+        }
+      }
+      return [];
+    }
     try {
       return JSON.parse(raw) as OccurrenceOverride[];
     } catch {
@@ -37,7 +49,7 @@ export class OverrideRepository {
   static async getOverridesForDate(userId: string, date: string): Promise<OccurrenceOverride[]> {
     const local = this.getLocalOverrides(userId).filter((o) => o.date === date);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         const overridesCol = collection(db, `users/${userId}/overrides`);
         const snapshot = await getDocs(query(overridesCol, where('date', '==', date)));
@@ -73,7 +85,7 @@ export class OverrideRepository {
 
     MutationQueue.enqueue(override.userId, 'overrides', 'set', override.id, itemToSave);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(override.userId)) {
       try {
         await setDoc(doc(db, `users/${override.userId}/overrides`, override.id), itemToSave);
         const q = MutationQueue.getQueue(override.userId);
@@ -92,7 +104,7 @@ export class OverrideRepository {
 
     MutationQueue.enqueue(userId, 'overrides', 'delete', overrideId);
 
-    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
+    if (canSyncWithFirestore(userId)) {
       try {
         await deleteDoc(doc(db, `users/${userId}/overrides`, overrideId));
         const q = MutationQueue.getQueue(userId);
