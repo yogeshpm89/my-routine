@@ -1,5 +1,6 @@
 import { OccurrenceOverride } from '@/types/routine';
 import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
   doc,
@@ -70,11 +71,16 @@ export class OverrideRepository {
     }
     this.saveLocalOverrides(override.userId, updated);
 
-    if (isFirebaseConfigured && db) {
+    MutationQueue.enqueue(override.userId, 'overrides', 'set', override.id, itemToSave);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await setDoc(doc(db, `users/${override.userId}/overrides`, override.id), itemToSave);
+        const q = MutationQueue.getQueue(override.userId);
+        const m = q.find((item) => item.collection === 'overrides' && item.docId === override.id);
+        if (m) MutationQueue.dequeue(override.userId, m.id);
       } catch (err) {
-        console.warn('Failed to save override to Firestore:', err);
+        console.warn('Failed to save override to Firestore, queued locally:', err);
       }
     }
   }
@@ -84,11 +90,16 @@ export class OverrideRepository {
     const filtered = all.filter((o) => o.id !== overrideId);
     this.saveLocalOverrides(userId, filtered);
 
-    if (isFirebaseConfigured && db) {
+    MutationQueue.enqueue(userId, 'overrides', 'delete', overrideId);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await deleteDoc(doc(db, `users/${userId}/overrides`, overrideId));
+        const q = MutationQueue.getQueue(userId);
+        const m = q.find((item) => item.collection === 'overrides' && item.docId === overrideId);
+        if (m) MutationQueue.dequeue(userId, m.id);
       } catch (err) {
-        console.warn('Failed to delete override from Firestore:', err);
+        console.warn('Failed to delete override from Firestore, queued locally:', err);
       }
     }
   }

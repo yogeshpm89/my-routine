@@ -1,5 +1,6 @@
 import { ActivityLog, ActivityStatus } from '@/types/routine';
 import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
   doc,
@@ -68,11 +69,16 @@ export class LogRepository {
     }
     this.saveLocalLogs(log.userId, updated);
 
-    if (isFirebaseConfigured && db) {
+    MutationQueue.enqueue(log.userId, 'logs', 'set', log.id, itemToSave);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await setDoc(doc(db, `users/${log.userId}/logs`, log.id), itemToSave);
+        const q = MutationQueue.getQueue(log.userId);
+        const m = q.find((item) => item.collection === 'logs' && item.docId === log.id);
+        if (m) MutationQueue.dequeue(log.userId, m.id);
       } catch (err) {
-        console.warn('Failed to save log to Firestore:', err);
+        console.warn('Failed to save log to Firestore, queued locally:', err);
       }
     }
   }

@@ -48,10 +48,18 @@ export function generateDailyOccurrences(
 ): ActivityOccurrence[] {
   const occurrences: ActivityOccurrence[] = [];
   const logMap = new Map<string, ActivityLog>();
-  logs.forEach((l) => logMap.set(l.templateId, l));
+  logs.forEach((l) => {
+    if (!l.date || l.date === targetDate) {
+      logMap.set(l.templateId, l);
+    }
+  });
 
   const overrideMap = new Map<string, OccurrenceOverride>();
-  overrides.forEach((o) => overrideMap.set(o.templateId, o));
+  overrides.forEach((o) => {
+    if (!o.date || o.date === targetDate) {
+      overrideMap.set(o.templateId, o);
+    }
+  });
 
   for (const template of templates) {
     if (!matchesRecurrence(template, targetDate)) continue;

@@ -1,6 +1,7 @@
 import { GoalTarget } from '@/types/routine';
 import { getInitialGoalTargets } from '@/lib/seed-data';
 import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
   doc,
@@ -79,11 +80,16 @@ export class GoalRepository {
     }
     this.saveLocalGoals(goal.userId, updated);
 
-    if (isFirebaseConfigured && db) {
+    MutationQueue.enqueue(goal.userId, 'goals', 'set', goal.id, itemToSave);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await setDoc(doc(db, `users/${goal.userId}/goals`, goal.id), itemToSave);
+        const q = MutationQueue.getQueue(goal.userId);
+        const m = q.find((item) => item.collection === 'goals' && item.docId === goal.id);
+        if (m) MutationQueue.dequeue(goal.userId, m.id);
       } catch (err) {
-        console.warn('Failed to save goal to Firestore:', err);
+        console.warn('Failed to save goal to Firestore, queued locally:', err);
       }
     }
   }
@@ -93,11 +99,16 @@ export class GoalRepository {
     const filtered = all.filter((g) => g.id !== goalId);
     this.saveLocalGoals(userId, filtered);
 
-    if (isFirebaseConfigured && db) {
+    MutationQueue.enqueue(userId, 'goals', 'delete', goalId);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await deleteDoc(doc(db, `users/${userId}/goals`, goalId));
+        const q = MutationQueue.getQueue(userId);
+        const m = q.find((item) => item.collection === 'goals' && item.docId === goalId);
+        if (m) MutationQueue.dequeue(userId, m.id);
       } catch (err) {
-        console.warn('Failed to delete goal from Firestore:', err);
+        console.warn('Failed to delete goal from Firestore, queued locally:', err);
       }
     }
   }

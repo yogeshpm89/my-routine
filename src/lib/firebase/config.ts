@@ -45,6 +45,10 @@ if (!getApps().length) {
   db = getFirestore(app);
 }
 
-auth = getAuth(app);
+try {
+  auth = getAuth(app);
+} catch {
+  auth = {} as Auth;
+}
 
 export { app, auth, db };

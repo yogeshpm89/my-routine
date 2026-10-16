@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:mobile": "node scripts/build-mobile.js",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

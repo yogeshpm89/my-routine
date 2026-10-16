@@ -1,6 +1,7 @@
 import { RoutineTemplate } from '@/types/routine';
 import { getInitialRoutineTemplates } from '@/lib/seed-data';
 import { db, isFirebaseConfigured } from '@/lib/firebase/config';
+import { MutationQueue } from '@/lib/sync/mutation-queue';
 import {
   collection,
   doc,
@@ -82,9 +83,16 @@ export class RoutineRepository {
     }
     this.saveLocalTemplates(template.userId, updated);
 
-    if (isFirebaseConfigured && db) {
+    // Enqueue mutation for guaranteed offline-first sync
+    MutationQueue.enqueue(template.userId, 'templates', 'set', template.id, templateToSave);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await setDoc(doc(db, `users/${template.userId}/templates`, template.id), templateToSave);
+        // Clear from queue if direct write succeeded
+        const q = MutationQueue.getQueue(template.userId);
+        const m = q.find((item) => item.collection === 'templates' && item.docId === template.id);
+        if (m) MutationQueue.dequeue(template.userId, m.id);
       } catch (err) {
         console.warn('Failed to persist template to Firestore, queued locally:', err);
       }
@@ -96,11 +104,17 @@ export class RoutineRepository {
     const filtered = templates.filter((t) => t.id !== templateId);
     this.saveLocalTemplates(userId, filtered);
 
-    if (isFirebaseConfigured && db) {
+    // Enqueue delete mutation
+    MutationQueue.enqueue(userId, 'templates', 'delete', templateId);
+
+    if (isFirebaseConfigured && db && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         await deleteDoc(doc(db, `users/${userId}/templates`, templateId));
+        const q = MutationQueue.getQueue(userId);
+        const m = q.find((item) => item.collection === 'templates' && item.docId === templateId);
+        if (m) MutationQueue.dequeue(userId, m.id);
       } catch (err) {
-        console.warn('Failed to delete template from Firestore:', err);
+        console.warn('Failed to delete template from Firestore, queued locally:', err);
       }
     }
   }

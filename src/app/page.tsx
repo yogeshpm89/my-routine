@@ -9,26 +9,37 @@ import {
   ActivityOccurrence,
   ActivityStatus,
   EditScope,
+  GoalTarget,
 } from '@/types/routine';
 import { RoutineRepository } from '@/lib/repositories/routine-repository';
 import { OverrideRepository } from '@/lib/repositories/override-repository';
 import { LogRepository } from '@/lib/repositories/log-repository';
+import { GoalRepository } from '@/lib/repositories/goal-repository';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
-import { getTodayDateString, addDays } from '@/lib/time-utils';
+import { detectScheduleConflicts } from '@/lib/conflict-detector';
+import { getTodayDateString, addDays, getDayOfWeek } from '@/lib/time-utils';
 import { CurrentActivityCard } from '@/components/routine/current-activity-card';
 import { TodayTimeline } from '@/components/routine/today-timeline';
+import { ConflictBanner } from '@/components/routine/conflict-banner';
+import { WeekView } from '@/components/calendar/week-view';
+import { MonthView } from '@/components/calendar/month-view';
+import { SettingsTab } from '@/components/settings/settings-tab';
+import { AnalyticsTab } from '@/components/analytics/analytics-tab';
+import { ConflictResolverModal } from '@/components/sync/conflict-resolver-modal';
+import { SyncEngine, SyncConflict } from '@/lib/sync/sync-engine';
+import { NotificationManager } from '@/lib/notifications/notification-manager';
+import { NotificationPreferencesRepository } from '@/lib/notifications/preferences-repository';
 import { ActivityEditorDialog } from '@/components/routine/activity-editor-dialog';
 import { RecurrenceEditScopeDialog } from '@/components/routine/recurrence-edit-scope-dialog';
 import { QuickLogModal } from '@/components/routine/quick-log-modal';
 import {
   Clock,
   CalendarDays,
+  Calendar,
   BarChart3,
   Settings,
   Wifi,
   WifiOff,
-  User,
-  ShieldCheck,
   CheckCircle2,
 } from 'lucide-react';
 
@@ -46,6 +57,7 @@ export default function RoutineApp() {
   const [templates, setTemplates] = useState<RoutineTemplate[]>([]);
   const [overrides, setOverrides] = useState<OccurrenceOverride[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [goals, setGoals] = useState<GoalTarget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Modal states
@@ -59,6 +71,7 @@ export default function RoutineApp() {
   const [quickLogOccurrence, setQuickLogOccurrence] = useState<ActivityOccurrence | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -70,14 +83,16 @@ export default function RoutineApp() {
     if (!userId) return;
     setIsLoading(true);
     try {
-      const [tList, oList, lList] = await Promise.all([
+      const [tList, oList, lList, gList] = await Promise.all([
         RoutineRepository.getTemplates(userId),
         OverrideRepository.getOverridesForDate(userId, selectedDate),
         LogRepository.getLogsForDate(userId, selectedDate),
+        GoalRepository.getGoals(userId),
       ]);
       setTemplates(tList);
       setOverrides(oList);
       setLogs(lList);
+      setGoals(gList);
     } catch (err) {
       console.error('Failed to load routine data:', err);
     } finally {
@@ -87,10 +102,38 @@ export default function RoutineApp() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    const unsubConflicts = SyncEngine.subscribeConflicts(setSyncConflicts);
+    const unsubRealtime = SyncEngine.startRealtimeListener(userId, () => {
+      loadData();
+    });
+    return () => {
+      unsubConflicts();
+      unsubRealtime();
+    };
+  }, [loadData, userId]);
+
+  const handleResolveConflict = async (
+    conflictId: string,
+    resolution: 'keep_local' | 'accept_remote'
+  ) => {
+    await SyncEngine.resolveConflict(userId, conflictId, resolution);
+    showToast('Sync conflict resolved');
+    loadData();
+  };
+
+  // Reconcile native 72-hour notifications upon routine updates
+  useEffect(() => {
+    NotificationManager.initialize(userId);
+    if (templates.length > 0) {
+      const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+      NotificationManager.reconcileNotifications(userId, templates, overrides, prefs);
+    }
+  }, [userId, templates, overrides]);
 
   // Generate computed occurrences for the day
   const occurrences = generateDailyOccurrences(templates, overrides, logs, selectedDate);
+  const dayOfWeek = getDayOfWeek(selectedDate);
+  const conflicts = detectScheduleConflicts(occurrences, goals, dayOfWeek);
 
   // Status updates
   const handleUpdateStatus = async (
@@ -130,14 +173,26 @@ export default function RoutineApp() {
     setEditorOpen(true);
   };
 
+  const handleOpenActivityByTemplateId = (templateId: string) => {
+    const occ = occurrences.find((o) => o.templateId === templateId);
+    if (occ) {
+      handleEditOccurrence(occ);
+    } else {
+      const temp = templates.find((t) => t.id === templateId);
+      if (temp) {
+        // Construct pseudo-occurrence to edit
+        const dummyOcc = generateDailyOccurrences([temp], overrides, logs, selectedDate)[0];
+        if (dummyOcc) handleEditOccurrence(dummyOcc);
+      }
+    }
+  };
+
   const handleSaveActivity = ({ template }: { template: RoutineTemplate }) => {
     if (editingOccurrence && editingOccurrence.template.recurrence.frequency !== 'once') {
-      // If editing a recurring activity, prompt for scope
       setPendingTemplateData(template);
       setEditorOpen(false);
       setScopeDialogOpen(true);
     } else {
-      // Direct save for new or one-time activities
       applySaveTemplate(template);
       setEditorOpen(false);
     }
@@ -154,7 +209,6 @@ export default function RoutineApp() {
     if (!pendingTemplateData || !editingOccurrence) return;
 
     if (scope === 'this_occurrence') {
-      // Save single-occurrence override
       const override: OccurrenceOverride = {
         id: `override_${editingOccurrence.templateId}_${selectedDate}`,
         userId,
@@ -171,7 +225,6 @@ export default function RoutineApp() {
       await OverrideRepository.saveOverride(override);
       showToast(`Applied changes to ${selectedDate} only`);
     } else if (scope === 'future_occurrences') {
-      // Bounded historical template ending yesterday
       const yesterday = addDays(selectedDate, -1);
       const oldTemplate = {
         ...editingOccurrence.template,
@@ -182,7 +235,6 @@ export default function RoutineApp() {
       };
       await RoutineRepository.saveTemplate(oldTemplate);
 
-      // New template starting today
       const newTemplate: RoutineTemplate = {
         ...pendingTemplateData,
         id: `template_${Date.now()}_future`,
@@ -194,7 +246,6 @@ export default function RoutineApp() {
       await RoutineRepository.saveTemplate(newTemplate);
       showToast(`Applied changes from ${selectedDate} onward`);
     } else {
-      // Modify base recurring template
       await RoutineRepository.saveTemplate(pendingTemplateData);
       showToast(`Updated recurring template "${pendingTemplateData.title}"`);
     }
@@ -257,13 +308,13 @@ export default function RoutineApp() {
           </div>
 
           {/* View Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/5">
+          <nav className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/5">
             {[
-              { id: 'today', label: 'Today', icon: Clock },
+              { id: 'today', label: 'Day', icon: Clock },
               { id: 'week', label: 'Week', icon: CalendarDays },
-              { id: 'month', label: 'Month', icon: CalendarDays },
+              { id: 'month', label: 'Month', icon: Calendar },
               { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-              { id: 'settings', label: 'Settings', icon: Settings },
+              { id: 'settings', label: 'Settings & Sync', icon: Settings },
             ].map((tab) => {
               const Icon = tab.icon;
               return (
@@ -277,7 +328,7 @@ export default function RoutineApp() {
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  {tab.label}
+                  <span className="hidden sm:inline">{tab.label}</span>
                 </button>
               );
             })}
@@ -314,27 +365,82 @@ export default function RoutineApp() {
 
       {/* Main Content Area */}
       <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 grow space-y-6">
-        {/* Hero Banner with Active Routine Card */}
-        <CurrentActivityCard
-          occurrences={occurrences}
-          onUpdateStatus={handleUpdateStatus}
-          onOpenEditor={handleEditOccurrence}
-        />
+        {activeTab === 'today' && (
+          <>
+            {/* Active Routine Card */}
+            <CurrentActivityCard
+              occurrences={occurrences}
+              onUpdateStatus={handleUpdateStatus}
+              onOpenEditor={handleEditOccurrence}
+            />
 
-        {/* Schedule Timeline */}
-        <TodayTimeline
-          occurrences={occurrences}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          onUpdateStatus={handleUpdateStatus}
-          onOpenCreate={handleOpenCreate}
-          onEdit={handleEditOccurrence}
-          onDuplicate={handleDuplicateOccurrence}
-          onDelete={handleDeleteOccurrence}
-        />
+            {/* Conflict & Goal Advisory Banner */}
+            <ConflictBanner
+              conflicts={conflicts}
+              onOpenActivity={handleOpenActivityByTemplateId}
+            />
+
+            {/* Schedule Timeline */}
+            <TodayTimeline
+              occurrences={occurrences}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onUpdateStatus={handleUpdateStatus}
+              onOpenCreate={handleOpenCreate}
+              onEdit={handleEditOccurrence}
+              onDuplicate={handleDuplicateOccurrence}
+              onDelete={handleDeleteOccurrence}
+            />
+          </>
+        )}
+
+        {activeTab === 'week' && (
+          <WeekView
+            selectedDate={selectedDate}
+            templates={templates}
+            overrides={overrides}
+            logs={logs}
+            goals={goals}
+            onSelectDate={setSelectedDate}
+            onOpenActivity={handleEditOccurrence}
+            onSwitchToDay={() => setActiveTab('today')}
+          />
+        )}
+
+        {activeTab === 'month' && (
+          <MonthView
+            selectedDate={selectedDate}
+            templates={templates}
+            overrides={overrides}
+            logs={logs}
+            goals={goals}
+            onSelectDate={setSelectedDate}
+            onSwitchToDay={() => setActiveTab('today')}
+          />
+        )}
+
+        {activeTab === 'analytics' && (
+          <AnalyticsTab
+            selectedDate={selectedDate}
+            templates={templates}
+            overrides={overrides}
+            logs={logs}
+            goals={goals}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsTab userId={userId} onDataReset={loadData} />
+        )}
       </main>
 
       {/* Modals & Dialogs */}
+      <ConflictResolverModal
+        conflicts={syncConflicts}
+        onResolve={handleResolveConflict}
+        onDismiss={() => setSyncConflicts([])}
+      />
+
       <ActivityEditorDialog
         isOpen={editorOpen}
         initialOccurrence={editingOccurrence}
