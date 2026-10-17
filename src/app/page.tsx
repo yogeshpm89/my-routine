@@ -33,6 +33,7 @@ import { NotificationPreferencesRepository } from '@/lib/notifications/preferenc
 import { ActivityEditorDialog } from '@/components/routine/activity-editor-dialog';
 import { RecurrenceEditScopeDialog } from '@/components/routine/recurrence-edit-scope-dialog';
 import { QuickLogModal } from '@/components/routine/quick-log-modal';
+import { MediaPlayerModal } from '@/components/media/media-player-modal';
 import {
   Clock,
   CalendarDays,
@@ -82,6 +83,10 @@ export default function RoutineApp() {
 
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [quickLogOccurrence, setQuickLogOccurrence] = useState<ActivityOccurrence | null>(null);
+
+  // In-app media player state
+  const [activeMediaOccurrence, setActiveMediaOccurrence] = useState<ActivityOccurrence | null>(null);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
@@ -238,6 +243,7 @@ export default function RoutineApp() {
         modifiedEndTime: pendingTemplateData.endTime,
         modifiedTitle: pendingTemplateData.title,
         notes: pendingTemplateData.notes,
+        modifiedMedia: pendingTemplateData.media,
         isCancelled: false,
         isPostponed: false,
         updatedAt: Date.now(),
@@ -533,6 +539,10 @@ export default function RoutineApp() {
                 occurrences={occurrences}
                 onUpdateStatus={handleUpdateStatus}
                 onOpenEditor={handleEditOccurrence}
+                onPlayMedia={(occ, idx = 0) => {
+                  setActiveMediaOccurrence(occ);
+                  setActiveMediaIndex(idx);
+                }}
               />
 
               {/* Conflict & Goal Advisory Banner */}
@@ -551,6 +561,10 @@ export default function RoutineApp() {
                 onEdit={handleEditOccurrence}
                 onDuplicate={handleDuplicateOccurrence}
                 onDelete={handleDeleteOccurrence}
+                onPlayMedia={(occ, idx = 0) => {
+                  setActiveMediaOccurrence(occ);
+                  setActiveMediaIndex(idx);
+                }}
               />
             </>
           )}
@@ -640,6 +654,13 @@ export default function RoutineApp() {
               handleUpdateStatus(occ, status, extra);
             }}
             onClose={() => setQuickLogOpen(false)}
+          />
+
+          <MediaPlayerModal
+            isOpen={Boolean(activeMediaOccurrence)}
+            occurrence={activeMediaOccurrence}
+            initialMediaIndex={activeMediaIndex}
+            onClose={() => setActiveMediaOccurrence(null)}
           />
         </>
       )}

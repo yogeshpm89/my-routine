@@ -18,7 +18,10 @@ import {
   ArrowRight,
   Clock,
   Sparkles,
+  Music,
+  Video,
 } from 'lucide-react';
+import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 
 interface CurrentActivityCardProps {
   occurrences: ActivityOccurrence[];
@@ -28,12 +31,14 @@ interface CurrentActivityCardProps {
     actualTimes?: { actualStartTime?: string; actualEndTime?: string; actualDurationMinutes?: number }
   ) => void;
   onOpenEditor: (occurrence: ActivityOccurrence) => void;
+  onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
 }
 
 export function CurrentActivityCard({
   occurrences,
   onUpdateStatus,
   onOpenEditor,
+  onPlayMedia,
 }: CurrentActivityCardProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
 
@@ -128,10 +133,47 @@ export function CurrentActivityCard({
                   </>
                 )}
               </div>
+
+              {/* Attached Media Chips */}
+              {currentOccurrence.media && currentOccurrence.media.length > 0 && (
+                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                  {currentOccurrence.media.map((item, idx) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onPlayMedia?.(currentOccurrence, idx)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-white/10 shadow-sm transition hover:scale-[1.02]"
+                      title={`Play ${item.title || item.fileName || 'media'}`}
+                    >
+                      {item.type === 'youtube' ? (
+                        <Youtube className="w-3.5 h-3.5 text-rose-500" />
+                      ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
+                        <Music className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Video className="w-3.5 h-3.5 text-blue-400" />
+                      )}
+                      <span className="truncate max-w-[150px]">{item.title || item.fileName || 'Media Track'}</span>
+                      <Play className="w-2.5 h-2.5 fill-current opacity-75" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Status Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
+              {currentOccurrence.media && currentOccurrence.media.length > 0 && (
+                <button
+                  id="btn-play-current-media"
+                  type="button"
+                  onClick={() => onPlayMedia?.(currentOccurrence, 0)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white shadow-lg shadow-rose-900/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  title="Play Routine Media"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Play Media ({currentOccurrence.media.length})</span>
+                </button>
+              )}
               {status !== 'completed' ? (
                 <>
                   {status !== 'in_progress' ? (

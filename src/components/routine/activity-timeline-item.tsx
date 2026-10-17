@@ -14,7 +14,10 @@ import {
   Sparkles,
   FastForward,
   RotateCcw,
+  Music,
+  Video,
 } from 'lucide-react';
+import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { cn } from '@/lib/utils';
 
 interface ActivityTimelineItemProps {
@@ -28,6 +31,7 @@ interface ActivityTimelineItemProps {
   onEdit: (occurrence: ActivityOccurrence) => void;
   onDuplicate: (occurrence: ActivityOccurrence) => void;
   onDelete: (occurrence: ActivityOccurrence) => void;
+  onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
 }
 
 export function ActivityTimelineItem({
@@ -37,6 +41,7 @@ export function ActivityTimelineItem({
   onEdit,
   onDuplicate,
   onDelete,
+  onPlayMedia,
 }: ActivityTimelineItemProps) {
   const status = occurrence.log?.status ?? 'pending';
 
@@ -174,10 +179,50 @@ export function ActivityTimelineItem({
                 </span>
               )}
             </div>
+
+            {/* Attached Media Chips */}
+            {occurrence.media && occurrence.media.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {occurrence.media.map((item, idx) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlayMedia?.(occurrence, idx);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-white/10 shadow-sm transition hover:scale-[1.02]"
+                    title={`Play ${item.title || item.fileName || 'media'}`}
+                  >
+                    {item.type === 'youtube' ? (
+                      <Youtube className="w-3 h-3 text-rose-500" />
+                    ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
+                      <Music className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Video className="w-3 h-3 text-blue-400" />
+                    )}
+                    <span className="truncate max-w-[120px]">
+                      {item.title || item.fileName || 'Play'}
+                    </span>
+                    <Play className="w-2.5 h-2.5 fill-current opacity-70 ml-0.5" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Action Button Strip */}
           <div className="flex items-center gap-1 shrink-0">
+            {occurrence.media && occurrence.media.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onPlayMedia?.(occurrence, 0)}
+                title={`Play attached media (${occurrence.media.length})`}
+                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition"
+              >
+                <Play className="w-4 h-4 fill-current" />
+              </button>
+            )}
             {status !== 'completed' ? (
               <>
                 {status !== 'in_progress' && (

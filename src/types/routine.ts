@@ -42,6 +42,27 @@ export const ActivityCategorySchema = z.enum([
 ]);
 export type ActivityCategory = z.infer<typeof ActivityCategorySchema>;
 
+export const MediaAttachmentTypeSchema = z.enum([
+  'youtube',
+  'audio_url',
+  'video_url',
+  'local_file',
+]);
+export type MediaAttachmentType = z.infer<typeof MediaAttachmentTypeSchema>;
+
+export const MediaAttachmentSchema = z.object({
+  id: z.string(),
+  type: MediaAttachmentTypeSchema,
+  title: z.string().optional(),
+  url: z.string().optional(), // YouTube or streaming audio/video URL
+  localKey: z.string().optional(), // Key in IndexedDB for downloaded/local files
+  fileName: z.string().optional(),
+  fileSize: z.number().optional(),
+  mimeType: z.string().optional(),
+  createdAt: z.number().default(() => Date.now()),
+});
+export type MediaAttachment = z.infer<typeof MediaAttachmentSchema>;
+
 export const RoutineTemplateSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -52,6 +73,7 @@ export const RoutineTemplateSchema = z.object({
   isFixed: z.boolean().default(false), // Protected from auto-shift/overlap
   recurrence: RecurrenceRuleSchema,
   notifications: z.array(NotificationRuleSchema).default([]),
+  media: z.array(MediaAttachmentSchema).optional(),
   notes: z.string().default(''),
   color: z.string().default('#3b82f6'),
   timezone: z.string().default('Asia/Kolkata'),
@@ -73,6 +95,7 @@ export const OccurrenceOverrideSchema = z.object({
   isPostponed: z.boolean().default(false),
   postponedToDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notes: z.string().optional(),
+  modifiedMedia: z.array(MediaAttachmentSchema).optional(),
   updatedAt: z.number(),
 });
 export type OccurrenceOverride = z.infer<typeof OccurrenceOverrideSchema>;
@@ -133,6 +156,7 @@ export interface ActivityOccurrence {
   notes: string;
   color: string;
   notifications: NotificationRule[];
+  media?: MediaAttachment[];
   hasOverride: boolean;
   isCancelled: boolean;
   isPostponed: boolean;

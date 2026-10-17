@@ -73,6 +73,7 @@ export function generateDailyOccurrences(
     const endTime = override?.modifiedEndTime ?? template.endTime;
     const title = override?.modifiedTitle ?? template.title;
     const notes = override?.notes ?? template.notes;
+    const media = override?.modifiedMedia ?? template.media ?? [];
     const durationMinutes = calculateDuration(startTime, endTime);
     const log = logMap.get(template.id);
 
@@ -89,6 +90,7 @@ export function generateDailyOccurrences(
       notes,
       color: template.color,
       notifications: template.notifications,
+      media,
       hasOverride: Boolean(override),
       isCancelled: false,
       isPostponed: Boolean(override?.isPostponed),

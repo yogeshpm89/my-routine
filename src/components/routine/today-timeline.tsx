@@ -25,6 +25,7 @@ interface TodayTimelineProps {
   onEdit: (occurrence: ActivityOccurrence) => void;
   onDuplicate: (occurrence: ActivityOccurrence) => void;
   onDelete: (occurrence: ActivityOccurrence) => void;
+  onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
 }
 
 export function TodayTimeline({
@@ -36,6 +37,7 @@ export function TodayTimeline({
   onEdit,
   onDuplicate,
   onDelete,
+  onPlayMedia,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
 
@@ -134,6 +136,7 @@ export function TodayTimeline({
                 onEdit={onEdit}
                 onDuplicate={onDuplicate}
                 onDelete={onDelete}
+                onPlayMedia={onPlayMedia}
               />
             );
           })}

@@ -47,6 +47,15 @@ export function getInitialRoutineTemplates(userId: string): RoutineTemplate[] {
         { id: 'notif_med_0', type: 'start', offsetMinutes: 0, enabled: true },
         { id: 'notif_med_end', type: 'end', offsetMinutes: 0, enabled: true },
       ],
+      media: [
+        {
+          id: 'media_seed_meditation',
+          type: 'youtube',
+          title: '5-Minute Calm Guided Meditation',
+          url: 'https://www.youtube.com/watch?v=inpok4MKVLM',
+          createdAt: now,
+        },
+      ],
       notes: 'Quiet sitting & breath awareness',
       color: '#10b981',
       timezone: 'Asia/Kolkata',
@@ -94,6 +103,15 @@ export function getInitialRoutineTemplates(userId: string): RoutineTemplate[] {
       },
       notifications: [
         { id: 'notif_mv_0', type: 'start', offsetMinutes: 0, enabled: true },
+      ],
+      media: [
+        {
+          id: 'media_seed_learning',
+          type: 'youtube',
+          title: 'Deep Focus & Ambient Beats',
+          url: 'https://www.youtube.com/watch?v=5qap5aO4i9A',
+          createdAt: now,
+        },
       ],
       notes: 'Mindvalley quest or professional development reading',
       color: '#8b5cf6',
