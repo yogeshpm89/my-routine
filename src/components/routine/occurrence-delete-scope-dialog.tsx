@@ -74,13 +74,13 @@ export function OccurrenceDeleteScopeDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
     >
-      <div className="relative w-full max-w-md rounded-2xl bg-slate-900 border border-white/10 p-6 shadow-2xl space-y-5">
+      <div className="relative w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-900 border border-white/10 p-6 shadow-2xl space-y-5 pb-safe">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 mt-0.5 border border-rose-500/20">
+            <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 mt-0.5 border border-rose-500/20 shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
@@ -98,7 +98,8 @@ export function OccurrenceDeleteScopeDialog({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition disabled:opacity-50"
+            aria-label="Close dialog"
+            className="text-slate-400 hover:text-white min-w-[44px] min-h-[44px] p-2 rounded-xl transition disabled:opacity-50 flex items-center justify-center active:scale-95"
           >
             <X className="w-5 h-5" />
           </button>
@@ -118,7 +119,7 @@ export function OccurrenceDeleteScopeDialog({
             id="btn-cancel-occurrence-only"
             disabled={isSubmitting}
             onClick={handleCancelAction}
-            className="w-full flex items-start gap-3.5 p-3.5 rounded-xl border border-white/10 bg-slate-800/60 hover:bg-rose-950/30 hover:border-rose-500/40 text-left transition group cursor-pointer disabled:opacity-50"
+            className="w-full flex items-start gap-3.5 p-3.5 rounded-xl border border-white/10 bg-slate-800/60 hover:bg-rose-950/30 hover:border-rose-500/40 text-left transition active:scale-[0.98] group cursor-pointer disabled:opacity-50"
           >
             <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition shrink-0">
               {actionType === 'cancel_occurrence' ? (
@@ -145,7 +146,7 @@ export function OccurrenceDeleteScopeDialog({
             id="btn-archive-entire-routine"
             disabled={isSubmitting}
             onClick={handleArchiveAction}
-            className="w-full flex items-start gap-3.5 p-3.5 rounded-xl border border-white/10 bg-slate-800/60 hover:bg-amber-950/30 hover:border-amber-500/40 text-left transition group cursor-pointer disabled:opacity-50"
+            className="w-full flex items-start gap-3.5 p-3.5 rounded-xl border border-white/10 bg-slate-800/60 hover:bg-amber-950/30 hover:border-amber-500/40 text-left transition active:scale-[0.98] group cursor-pointer disabled:opacity-50"
           >
             <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 group-hover:bg-amber-500 group-hover:text-white transition shrink-0">
               {actionType === 'archive_routine' ? (
@@ -175,7 +176,7 @@ export function OccurrenceDeleteScopeDialog({
             id="btn-keep-routine"
             disabled={isSubmitting}
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 border border-white/5 transition cursor-pointer disabled:opacity-50"
+            className="min-h-[44px] px-5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 border border-white/5 transition active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center"
           >
             Keep routine
           </button>

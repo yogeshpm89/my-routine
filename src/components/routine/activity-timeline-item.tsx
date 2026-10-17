@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Music,
   Video,
+  Clock,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { cn } from '@/lib/utils';
@@ -46,6 +47,9 @@ export function ActivityTimelineItem({
   onExecuteAi,
 }: ActivityTimelineItemProps) {
   const status = occurrence.log?.status ?? 'pending';
+  const isCompleted = status === 'completed';
+  const isSkipped = status === 'skipped';
+  const isInProgress = status === 'in_progress';
 
   const statusStyles: Record<
     ActivityStatus,
@@ -91,16 +95,27 @@ export function ActivityTimelineItem({
 
   const currentStyle = statusStyles[status];
 
+  // Quick 1-tap completion toggle for mobile
+  const handleToggleCompletion = () => {
+    if (isCompleted) {
+      onUpdateStatus(occurrence, 'pending');
+    } else {
+      onUpdateStatus(occurrence, 'completed', {
+        actualDurationMinutes: occurrence.durationMinutes,
+      });
+    }
+  };
+
   return (
     <div
       className={cn(
-        'group relative flex items-start gap-3 sm:gap-5 transition-all duration-200',
-        status === 'completed' && 'opacity-85',
-        status === 'skipped' && 'opacity-60'
+        'group relative flex items-start gap-0 sm:gap-5 transition-all duration-200 w-full mb-3',
+        isCompleted && 'opacity-85',
+        isSkipped && 'opacity-60'
       )}
     >
-      {/* Time Column */}
-      <div className="w-20 sm:w-28 shrink-0 text-right pt-2.5">
+      {/* Desktop Time Column (hidden on mobile to give task full width) */}
+      <div className="hidden sm:block w-24 sm:w-28 shrink-0 text-right pt-2.5">
         <span className="block text-xs sm:text-sm font-bold text-white tracking-tight">
           {formatTime12Hour(occurrence.startTime)}
         </span>
@@ -112,8 +127,8 @@ export function ActivityTimelineItem({
         </span>
       </div>
 
-      {/* Timeline Node & Line */}
-      <div className="relative flex flex-col items-center self-stretch">
+      {/* Desktop Timeline Node & Line (hidden on mobile) */}
+      <div className="hidden sm:flex relative flex-col items-center self-stretch">
         <div
           className={cn(
             'w-4 h-4 rounded-full border-2 border-slate-950 z-10 transition-transform group-hover:scale-125 shadow-md',
@@ -124,190 +139,233 @@ export function ActivityTimelineItem({
         <div className="w-0.5 grow bg-slate-800 my-1 group-last:hidden" />
       </div>
 
-      {/* Main Content Card */}
+      {/* Main Task Card (Full width on mobile with left accent bar) */}
       <div
+        style={{ borderLeftColor: occurrence.color || '#3b82f6', borderLeftWidth: '4px' }}
         className={cn(
-          'grow rounded-xl p-3.5 sm:p-4 transition-all duration-200 border shadow-lg backdrop-blur-md mb-3',
+          'w-full grow rounded-2xl p-3 sm:p-4 transition-all duration-200 border shadow-md backdrop-blur-md',
           currentStyle.border,
           isCurrent
-            ? 'bg-slate-900/90 ring-1 ring-blue-500/40 shadow-blue-900/20'
+            ? 'bg-slate-900/95 ring-1 ring-blue-500/40 shadow-blue-900/20'
             : 'bg-slate-900/60 hover:bg-slate-900/90 hover:border-white/20'
         )}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3
-                onClick={() => onEdit(occurrence)}
-                className={cn(
-                  'text-base sm:text-lg font-semibold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors',
-                  status === 'completed' && 'text-slate-300',
-                  status === 'skipped' && 'line-through text-slate-500'
-                )}
-              >
-                {occurrence.title}
-              </h3>
-
-              {occurrence.isFixed && (
-                <span
-                  title="Fixed Commitment: Protected from accidental rescheduling"
-                  className="inline-flex items-center gap-1 text-[11px] text-amber-300 bg-amber-950/70 border border-amber-500/30 px-1.5 py-0.5 rounded"
-                >
-                  <Lock className="w-2.5 h-2.5" /> Fixed
-                </span>
-              )}
-
-              {occurrence.hasOverride && (
-                <span
-                  title="Single-day override active"
-                  className="inline-flex items-center gap-1 text-[11px] text-purple-300 bg-purple-950/70 border border-purple-500/30 px-1.5 py-0.5 rounded"
-                >
-                  <Sparkles className="w-2.5 h-2.5" /> Exception
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <CategoryBadge category={occurrence.category} size="sm" />
-              {status !== 'pending' && (
-                <span
-                  className={cn(
-                    'text-[11px] px-2 py-0.5 rounded-full border border-white/5 capitalize',
-                    currentStyle.badgeBg,
-                    currentStyle.badgeText
-                  )}
-                >
-                  {status.replace('_', ' ')}
-                </span>
-              )}
-            </div>
-
-            {/* Attached Media Chips */}
-            {occurrence.media && occurrence.media.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                {occurrence.media.map((item, idx) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPlayMedia?.(occurrence, idx);
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-white/10 shadow-sm transition hover:scale-[1.02]"
-                    title={`Play ${item.title || item.fileName || 'media'}`}
-                  >
-                    {item.type === 'youtube' ? (
-                      <Youtube className="w-3 h-3 text-rose-500" />
-                    ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
-                      <Music className="w-3 h-3 text-emerald-400" />
-                    ) : (
-                      <Video className="w-3 h-3 text-blue-400" />
-                    )}
-                    <span className="truncate max-w-[120px]">
-                      {item.title || item.fileName || 'Play'}
-                    </span>
-                    <Play className="w-2.5 h-2.5 fill-current opacity-70 ml-0.5" />
-                  </button>
-                ))}
-              </div>
-            )}
+        {/* Mobile Header: Time Badge & Category Row */}
+        <div className="flex sm:hidden items-center justify-between gap-2 pb-2 mb-2 border-b border-white/5 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+            <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span>
+              {formatTime12Hour(occurrence.startTime)} – {formatTime12Hour(occurrence.endTime)}
+            </span>
+            <span className="text-[10px] text-slate-400 font-normal">
+              ({formatDuration(occurrence.durationMinutes)})
+            </span>
           </div>
 
-          {/* Action Button Strip */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {occurrence.isFixed && (
+              <span
+                title="Fixed commitment"
+                className="inline-flex items-center gap-0.5 text-[10px] text-amber-300 bg-amber-950/70 border border-amber-500/30 px-1.5 py-0.2 rounded"
+              >
+                <Lock className="w-2.5 h-2.5" /> Fixed
+              </span>
+            )}
+            <CategoryBadge category={occurrence.category} size="sm" />
+          </div>
+        </div>
+
+        {/* Primary Row: 1-Tap Checkbox + Title + Action Strip */}
+        <div className="flex items-start justify-between gap-2.5">
+          {/* Left Checkbox Button & Title */}
+          <div className="flex items-start gap-2.5 grow min-w-0">
+            {/* 1-Tap Thumb Completion Button */}
+            <button
+              type="button"
+              onClick={handleToggleCompletion}
+              aria-label={isCompleted ? 'Mark as pending' : 'Mark as complete'}
+              className="min-w-[40px] min-h-[40px] -ml-1 -mt-0.5 flex items-center justify-center shrink-0 text-slate-400 hover:text-emerald-400 transition cursor-pointer active:scale-95"
+            >
+              {isCompleted ? (
+                <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-slate-950 shadow-sm shadow-emerald-500/30">
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                </div>
+              ) : isSkipped ? (
+                <div className="w-6 h-6 rounded-full border-2 border-rose-500/60 flex items-center justify-center text-rose-400">
+                  <FastForward className="w-3.5 h-3.5" />
+                </div>
+              ) : (
+                <div className="w-6 h-6 rounded-full border-2 border-slate-600 hover:border-emerald-400 transition flex items-center justify-center group-hover:border-slate-400" />
+              )}
+            </button>
+
+            {/* Task Title & Badges */}
+            <div className="grow min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3
+                  onClick={() => onEdit(occurrence)}
+                  className={cn(
+                    'text-sm sm:text-base font-semibold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors leading-snug',
+                    isCompleted && 'text-slate-400 line-through font-normal',
+                    isSkipped && 'text-slate-500 line-through italic'
+                  )}
+                >
+                  {occurrence.title}
+                </h3>
+
+                {/* Desktop Badges */}
+                <div className="hidden sm:inline-flex items-center gap-1.5">
+                  {occurrence.isFixed && (
+                    <span
+                      title="Fixed Commitment"
+                      className="inline-flex items-center gap-1 text-[11px] text-amber-300 bg-amber-950/70 border border-amber-500/30 px-1.5 py-0.5 rounded"
+                    >
+                      <Lock className="w-2.5 h-2.5" /> Fixed
+                    </span>
+                  )}
+                  {occurrence.hasOverride && (
+                    <span
+                      title="Single-day override active"
+                      className="inline-flex items-center gap-1 text-[11px] text-purple-300 bg-purple-950/70 border border-purple-500/30 px-1.5 py-0.5 rounded"
+                    >
+                      <Sparkles className="w-2.5 h-2.5" /> Exception
+                    </span>
+                  )}
+                  <CategoryBadge category={occurrence.category} size="sm" />
+                </div>
+              </div>
+
+              {/* Status pill on mobile if special */}
+              {status !== 'pending' && status !== 'completed' && (
+                <div className="flex sm:hidden items-center gap-1">
+                  <span
+                    className={cn(
+                      'text-[10px] px-2 py-0.5 rounded-full border border-white/5 capitalize font-medium',
+                      currentStyle.badgeBg,
+                      currentStyle.badgeText
+                    )}
+                  >
+                    {status.replace('_', ' ')}
+                  </span>
+                </div>
+              )}
+
+              {/* Attached Media Chips */}
+              {occurrence.media && occurrence.media.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  {occurrence.media.map((item, idx) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPlayMedia?.(occurrence, idx);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-white/10 shadow-sm transition active:scale-95 cursor-pointer"
+                      title={`Play ${item.title || item.fileName || 'media'}`}
+                    >
+                      {item.type === 'youtube' ? (
+                        <Youtube className="w-3 h-3 text-rose-500" />
+                      ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
+                        <Music className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Video className="w-3 h-3 text-blue-400" />
+                      )}
+                      <span className="truncate max-w-[120px]">
+                        {item.title || item.fileName || 'Play'}
+                      </span>
+                      <Play className="w-2.5 h-2.5 fill-current opacity-70 ml-0.5" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons Strip */}
           <div className="flex items-center gap-1 shrink-0">
             {occurrence.aiActionId && (
               <button
                 type="button"
                 onClick={() => onExecuteAi?.(occurrence)}
                 title="Execute attached AI Routine Action"
-                className="p-1.5 rounded-lg text-purple-400 hover:text-purple-300 hover:bg-purple-950/40 transition cursor-pointer"
+                className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-purple-400 hover:text-purple-300 hover:bg-purple-950/40 transition cursor-pointer flex items-center justify-center active:scale-95"
               >
                 <Sparkles className="w-4 h-4" />
               </button>
             )}
-            {occurrence.media && occurrence.media.length > 0 && (
+
+            {!isCompleted && !isInProgress && (
               <button
                 type="button"
-                onClick={() => onPlayMedia?.(occurrence, 0)}
-                title={`Play attached media (${occurrence.media.length})`}
-                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition cursor-pointer"
+                onClick={() =>
+                  onUpdateStatus(occurrence, 'in_progress', {
+                    actualStartTime: occurrence.startTime,
+                  })
+                }
+                title="Start activity"
+                className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
               >
-                <Play className="w-4 h-4 fill-current" />
+                <Play className="w-3.5 h-3.5" />
               </button>
             )}
-            {status !== 'completed' ? (
-              <>
-                {status !== 'in_progress' && (
-                  <button
-                    onClick={() =>
-                      onUpdateStatus(occurrence, 'in_progress', {
-                        actualStartTime: occurrence.startTime,
-                      })
-                    }
-                    title="Mark in progress"
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition"
-                  >
-                    <Play className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  onClick={() =>
-                    onUpdateStatus(occurrence, 'completed', {
-                      actualDurationMinutes: occurrence.durationMinutes,
-                    })
-                  }
-                  title="Mark complete"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onUpdateStatus(occurrence, 'skipped')}
-                  title="Skip activity"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-                >
-                  <FastForward className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
+
+            {!isCompleted && (
               <button
-                onClick={() => onUpdateStatus(occurrence, 'pending')}
-                title="Reset status"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                type="button"
+                onClick={() => onUpdateStatus(occurrence, 'skipped')}
+                title="Skip activity"
+                className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
               >
-                <RotateCcw className="w-4 h-4" />
+                <FastForward className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {isCompleted && (
+              <button
+                type="button"
+                onClick={() => onUpdateStatus(occurrence, 'pending')}
+                title="Reset to pending"
+                className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
 
             <button
+              type="button"
               onClick={() => onEdit(occurrence)}
-              title="Edit activity"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              title="Edit routine"
+              className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
+
             <button
+              type="button"
               onClick={() => onDuplicate(occurrence)}
               title="Duplicate activity"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              className="hidden md:flex min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition items-center justify-center active:scale-95 cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5" />
             </button>
+
             <button
+              type="button"
               id={`btn-delete-occurrence-${occurrence.templateId}`}
               onClick={() => onDelete(occurrence)}
-              title="Delete activity"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
+              title="Delete or cancel occurrence"
+              className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer flex items-center justify-center active:scale-95"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Optional Notes & Log info */}
+        {/* Optional Notes & Completion Log Info */}
         {(occurrence.notes || occurrence.log?.completionNotes) && (
-          <div className="mt-2 text-xs text-slate-400 space-y-1">
-            {occurrence.notes && <p>{occurrence.notes}</p>}
+          <div className="mt-2.5 pt-2 border-t border-white/5 text-xs text-slate-400 space-y-1">
+            {occurrence.notes && <p className="line-clamp-2">{occurrence.notes}</p>}
             {occurrence.log?.completionNotes && (
               <p className="text-emerald-400/90 font-medium bg-emerald-950/40 px-2 py-1 rounded border border-emerald-500/20">
                 Log: {occurrence.log.completionNotes}

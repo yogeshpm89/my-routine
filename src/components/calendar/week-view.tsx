@@ -55,22 +55,24 @@ export function WeekView({
   return (
     <div className="space-y-4">
       {/* Week Header & Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md">
+        <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
           <button
             onClick={handlePrevWeek}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition border border-white/5"
+            className="min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition border border-white/5 flex items-center justify-center active:scale-95"
             title="Previous week"
+            aria-label="Previous week"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <span className="text-sm sm:text-base font-bold text-white px-2">
-            Week of {startOfWeek} to {weekEnd}
+          <span className="text-xs sm:text-base font-bold text-white px-2 text-center">
+            {startOfWeek} to {weekEnd}
           </span>
           <button
             onClick={handleNextWeek}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition border border-white/5"
+            className="min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition border border-white/5 flex items-center justify-center active:scale-95"
             title="Next week"
+            aria-label="Next week"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -79,11 +81,55 @@ export function WeekView({
         <div className="flex items-center gap-2">
           <button
             onClick={onSwitchToDay}
-            className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-600/30 text-blue-300 border border-blue-500/30 hover:bg-blue-600 hover:text-white transition"
+            className="w-full sm:w-auto min-h-[44px] px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600/30 text-blue-300 border border-blue-500/30 hover:bg-blue-600 hover:text-white transition flex items-center justify-center active:scale-95"
           >
             Switch to Day View
           </button>
         </div>
+      </div>
+
+      {/* Mobile Day Selector Ribbon */}
+      <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        {weekDays.map((dateStr) => {
+          const isSelected = dateStr === selectedDate;
+          const [y, m, d] = dateStr.split('-').map(Number);
+          const dateObj = new Date(Date.UTC(y, m - 1, d));
+          const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(dateObj);
+          const dayNum = dateObj.getUTCDate();
+          const dayOccurrences = generateDailyOccurrences(templates, overrides, logs, dateStr);
+          const dayDow = getDayOfWeek(dateStr);
+          const conflicts = detectScheduleConflicts(dayOccurrences, goals, dayDow);
+          const hasError = conflicts.some((c) => c.severity === 'error');
+          const hasWarning = conflicts.some((c) => c.severity === 'warning');
+
+          return (
+            <button
+              key={`ribbon-${dateStr}`}
+              onClick={() => onSelectDate(dateStr)}
+              className={`flex-1 min-w-[46px] min-h-[52px] py-1.5 px-1 rounded-xl flex flex-col items-center justify-center border transition active:scale-95 ${
+                isSelected
+                  ? 'bg-blue-600 border-blue-400 text-white shadow-md shadow-blue-600/25'
+                  : 'bg-slate-900/60 border-white/10 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                {dayName}
+              </span>
+              <span className="text-sm font-extrabold leading-tight">
+                {dayNum}
+              </span>
+              <div className="flex items-center gap-0.5 mt-0.5 h-1.5">
+                {hasError ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                ) : hasWarning ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                ) : dayOccurrences.length > 0 ? (
+                  <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white/80' : 'bg-blue-400/80'}`} />
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* 7-Day Horizontal Responsive Grid */}
@@ -167,7 +213,7 @@ export function WeekView({
                         e.stopPropagation();
                         onOpenActivity(occ);
                       }}
-                      className={`p-1.5 rounded-lg border text-[11px] transition hover:scale-[1.02] flex items-center justify-between gap-1 ${
+                      className={`min-h-[36px] p-2 rounded-xl border text-[11px] transition hover:scale-[1.01] active:scale-95 flex items-center justify-between gap-1.5 ${
                         isCompleted
                           ? 'bg-slate-800/40 border-white/5 opacity-60 text-slate-400 line-through'
                           : 'bg-slate-800/80 border-white/5 text-slate-200'

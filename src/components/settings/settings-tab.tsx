@@ -199,12 +199,12 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-2">
           <button
             onClick={handlePushAllToCloud}
             disabled={isSyncing}
             title="Uploads all current local routine templates and daily goals into Cloud Firestore"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-semibold border border-white/10 transition disabled:opacity-50"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs sm:text-sm font-semibold border border-white/10 transition disabled:opacity-50"
           >
             <CloudUpload className="w-4 h-4 text-emerald-400" />
             <span>Upload All to Firestore</span>
@@ -213,7 +213,7 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
           <button
             onClick={handleSyncNow}
             disabled={isSyncing}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-blue-600/30 transition disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Reconciling Changes...' : 'Sync Now'}</span>
@@ -238,10 +238,10 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <button
             onClick={handleExportBackup}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-semibold border border-white/10 transition"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs sm:text-sm font-semibold border border-white/10 transition"
           >
             <Download className="w-4 h-4 text-emerald-400" />
             <span>Export Backup (.JSON)</span>
@@ -257,7 +257,7 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-semibold border border-white/10 transition"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs sm:text-sm font-semibold border border-white/10 transition"
           >
             <Upload className="w-4 h-4 text-blue-400" />
             <span>Restore from File</span>
@@ -279,20 +279,20 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
           <button
             onClick={handleResetToDefaults}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-purple-950/60 text-purple-300 text-xs sm:text-sm font-semibold border border-purple-500/30 transition"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-purple-950/60 active:scale-95 text-purple-300 text-xs sm:text-sm font-semibold border border-purple-500/30 transition text-center"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-4 h-4 shrink-0" />
             <span>Reset to Seeded Routine (20+ Blocks)</span>
           </button>
 
           <button
             onClick={handleClearAll}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 text-xs sm:text-sm font-semibold border border-rose-500/30 transition"
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 active:scale-95 text-rose-300 text-xs sm:text-sm font-semibold border border-rose-500/30 transition text-center"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-4 h-4 shrink-0" />
             <span>Delete All Routine Data</span>
           </button>
         </div>

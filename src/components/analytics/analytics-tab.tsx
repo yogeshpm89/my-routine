@@ -101,10 +101,10 @@ export function AnalyticsTab({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 p-1 bg-slate-800/80 rounded-xl border border-white/5 self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-800/80 rounded-xl border border-white/5 w-full sm:w-auto">
           <button
             onClick={() => setTimeframe('day')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95 flex items-center justify-center ${
               timeframe === 'day'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white'
@@ -114,7 +114,7 @@ export function AnalyticsTab({
           </button>
           <button
             onClick={() => setTimeframe('week')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95 flex items-center justify-center ${
               timeframe === 'week'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white'
@@ -215,9 +215,9 @@ export function AnalyticsTab({
                   setEditingGoal(null);
                   setGoalEditorOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold border border-blue-500/30 transition cursor-pointer"
+                className="flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold border border-blue-500/30 transition active:scale-95 cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 <span>Add Target</span>
               </button>
             )}
@@ -265,10 +265,11 @@ export function AnalyticsTab({
                           setEditingGoal(gf.goal);
                           setGoalEditorOpen(true);
                         }}
-                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/60 transition cursor-pointer"
+                        className="min-w-[40px] min-h-[40px] p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700/60 transition active:scale-95 flex items-center justify-center cursor-pointer"
                         title="Edit goal target"
+                        aria-label="Edit goal target"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
                     )}
                   </div>

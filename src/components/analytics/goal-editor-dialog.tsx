@@ -110,10 +110,10 @@ export function GoalEditorDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg rounded-2xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="relative w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-950/50">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-white/10 bg-slate-950/80 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
               <Target className="w-5 h-5" />
@@ -128,125 +128,129 @@ export function GoalEditorDialog({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            aria-label="Close dialog"
+            className="min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center active:scale-95"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
-          {error && (
-            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/30 text-rose-300 text-xs font-medium">
-              {error}
-            </div>
-          )}
-
-          {/* Title */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Goal Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Deep Work Focus, Daily Exercise, Reading"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
-            />
-          </div>
-
-          {/* Frequency Switcher */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Cadence</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setFrequency('daily')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition ${
-                  frequency === 'daily'
-                    ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/25'
-                    : 'bg-slate-800/80 text-slate-400 border-white/5 hover:text-white'
-                }`}
-              >
-                Daily Target
-              </button>
-              <button
-                type="button"
-                onClick={() => setFrequency('weekly')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition ${
-                  frequency === 'weekly'
-                    ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/25'
-                    : 'bg-slate-800/80 text-slate-400 border-white/5 hover:text-white'
-                }`}
-              >
-                Weekly Cumulative
-              </button>
-            </div>
-          </div>
-
-          {/* Target Duration */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">
-              Target Duration {frequency === 'daily' ? 'Per Day' : 'Per Week'}
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Hours</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="168"
-                  value={targetHours}
-                  onChange={(e) => setTargetHours(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
-                />
+        <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
+            {error && (
+              <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/30 text-rose-300 text-xs font-medium">
+                {error}
               </div>
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Minutes</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
-                  step="5"
-                  value={targetMinutesRemainder}
-                  onChange={(e) => setTargetMinutesRemainder(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
-                />
+            )}
+
+            {/* Title */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Goal Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Deep Work Focus, Daily Exercise, Reading"
+                className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
+              />
+            </div>
+
+            {/* Frequency Switcher */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Cadence</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFrequency('daily')}
+                  className={`min-h-[44px] py-2 px-3 rounded-xl text-xs font-semibold border transition active:scale-95 flex items-center justify-center ${
+                    frequency === 'daily'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/25'
+                      : 'bg-slate-800/80 text-slate-400 border-white/5 hover:text-white'
+                  }`}
+                >
+                  Daily Target
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFrequency('weekly')}
+                  className={`min-h-[44px] py-2 px-3 rounded-xl text-xs font-semibold border transition active:scale-95 flex items-center justify-center ${
+                    frequency === 'weekly'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/25'
+                      : 'bg-slate-800/80 text-slate-400 border-white/5 hover:text-white'
+                  }`}
+                >
+                  Weekly Cumulative
+                </button>
               </div>
             </div>
-          </div>
 
-          {/* Categories to track */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-300">
-              Tracked Activity Categories
-            </label>
-            <p className="text-[11px] text-slate-400">
-              Activities matching any selected category will automatically count toward this goal.
-            </p>
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {ALL_CATEGORIES.map((cat) => {
-                const isSelected = selectedCategories.includes(cat);
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => toggleCategory(cat)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
-                        : 'bg-slate-800/80 text-slate-400 border-white/5 hover:bg-slate-700 hover:text-white'
-                    }`}
-                  >
-                    {CATEGORY_CONFIG[cat]?.label || cat}
-                  </button>
-                );
-              })}
+            {/* Target Duration */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Target Duration {frequency === 'daily' ? 'Per Day' : 'Per Week'}
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Hours</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="168"
+                    value={targetHours}
+                    onChange={(e) => setTargetHours(e.target.value)}
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Minutes</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    step="5"
+                    value={targetMinutesRemainder}
+                    onChange={(e) => setTargetMinutesRemainder(e.target.value)}
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Categories to track */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300">
+                Tracked Activity Categories
+              </label>
+              <p className="text-[11px] text-slate-400">
+                Activities matching any selected category will automatically count toward this goal.
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {ALL_CATEGORIES.map((cat) => {
+                  const isSelected = selectedCategories.includes(cat);
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => toggleCategory(cat)}
+                      className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer active:scale-95 flex items-center justify-center ${
+                        isSelected
+                          ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
+                          : 'bg-slate-800/80 text-slate-400 border-white/5 hover:bg-slate-700 hover:text-white'
+                      }`}
+                    >
+                      {CATEGORY_CONFIG[cat]?.label || cat}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-white/10">
+          {/* Sticky Bottom Action Bar */}
+          <div className="sticky bottom-0 bg-slate-950/95 backdrop-blur-md px-5 sm:px-6 py-3.5 border-t border-white/10 flex items-center justify-between gap-3 pb-safe shrink-0">
             {initialGoal && onDelete ? (
               <button
                 type="button"
@@ -256,7 +260,7 @@ export function GoalEditorDialog({
                     onClose();
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition cursor-pointer"
+                className="flex items-center gap-1.5 min-h-[44px] px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition active:scale-95 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Delete</span>
@@ -269,13 +273,13 @@ export function GoalEditorDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-semibold transition"
+                className="min-h-[44px] px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-semibold transition active:scale-95"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 transition cursor-pointer"
+                className="flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 transition active:scale-95 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Save to Cloud</span>

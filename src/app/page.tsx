@@ -54,13 +54,18 @@ import {
   Zap,
   LogIn,
   UserPlus,
+  Menu,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
+import { MobileDrawer } from '@/components/navigation/mobile-drawer';
 
 export default function RoutineApp() {
-  const { user, loading: authLoading, signInWithGoogle } = useAuth();
-  const isAuthenticated = Boolean(user && !user.isAnonymous);
+  const { user, isDemoMode, loading: authLoading, signInWithGoogle, continueAsGuest, signOut } = useAuth();
+  const isAuthenticated = Boolean(user);
+  const isCloudSynced = Boolean(user && !user.isAnonymous);
   const userId = user?.uid || '';
+
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
@@ -146,7 +151,7 @@ export default function RoutineApp() {
     setGoals(GoalRepository.getLocalGoals(userId));
     setIsLoading(false);
 
-    if (!isAuthenticated) return;
+    if (!isCloudSynced) return;
 
     // Attach real-time onSnapshot listeners to all 4 Firestore subcollections
     const unsubTemplates = RoutineRepository.subscribeTemplates(userId, (newTemplates) => {
@@ -494,23 +499,22 @@ export default function RoutineApp() {
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">
                 My Routine
               </h1>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                 <span className="text-blue-400 font-medium">Asia/Kolkata</span>
-                <span>•</span>
-                <span>Adaptive Routine Engine</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">Adaptive Routine Engine</span>
               </div>
             </div>
           </div>
 
           {isAuthenticated ? (
             <>
-              {/* View Tabs */}
-              <nav className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/5">
+              {/* Desktop View Tabs (hidden on mobile) */}
+              <nav className="hidden md:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-white/5">
                 {[
                   { id: 'today', label: 'Day', icon: Clock },
                   { id: 'week', label: 'Week', icon: CalendarDays },
                   { id: 'month', label: 'Month', icon: Calendar },
-                  { id: 'ai', label: 'AI Actions', icon: Sparkles },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
                   { id: 'settings', label: 'Settings & Sync', icon: Settings },
                 ].map((tab) => {
@@ -519,37 +523,62 @@ export default function RoutineApp() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as any)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer min-h-[36px] ${
                         activeTab === tab.id
                           ? 'bg-blue-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white hover:bg-slate-800'
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">{tab.label}</span>
+                      <span>{tab.label}</span>
                     </button>
                   );
                 })}
               </nav>
 
               {/* Status & Profile Pill */}
-              <div className="flex items-center gap-2.5">
-                <div
-                  title="Connected to Cloud Firestore"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-900 border border-white/10"
-                >
-                  <Wifi className="w-3 h-3 text-emerald-400" />
-                  <span className="text-emerald-400 text-[11px] hidden sm:inline">Cloud Synced</span>
+              <div className="flex items-center gap-1.5 sm:gap-2.5">
+                {isCloudSynced ? (
+                  <div
+                    title="Connected to Cloud Firestore"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-slate-900 border border-emerald-500/30"
+                  >
+                    <Wifi className="w-3 h-3 text-emerald-400" />
+                    <span className="text-emerald-400 text-[11px] hidden sm:inline">Cloud Synced</span>
+                  </div>
+                ) : (
+                  <div
+                    title="Local Guest Storage"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-slate-900 border border-amber-500/30"
+                  >
+                    <WifiOff className="w-3 h-3 text-amber-400" />
+                    <span className="text-amber-400 text-[11px] hidden sm:inline">Guest</span>
+                  </div>
+                )}
+
+                {selectedDate !== getTodayDateString('Asia/Kolkata') && (
+                  <button
+                    onClick={() => setSelectedDate(getTodayDateString('Asia/Kolkata'))}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600 hover:text-white transition cursor-pointer min-h-[32px]"
+                  >
+                    Today
+                  </button>
+                )}
+
+                <div className="hidden sm:block">
+                  <UserMenu />
                 </div>
 
+                {/* Mobile Drawer Hamburger Button */}
                 <button
-                  onClick={() => setSelectedDate(getTodayDateString('Asia/Kolkata'))}
-                  className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/5 transition cursor-pointer"
+                  type="button"
+                  id="btn-open-mobile-menu"
+                  onClick={() => setMobileDrawerOpen(true)}
+                  className="md:hidden flex items-center justify-center p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 border border-white/10 active:scale-95 transition cursor-pointer min-w-[42px] min-h-[42px]"
+                  aria-label="Open Navigation Menu"
                 >
-                  Today
+                  <Menu className="w-5 h-5" />
                 </button>
-
-                <UserMenu />
               </div>
             </>
           ) : (
@@ -613,6 +642,14 @@ export default function RoutineApp() {
               >
                 <LogIn className="w-4 h-4" />
                 <span>Sign In</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => continueAsGuest()}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-sm border border-white/10 transition cursor-pointer"
+              >
+                <span>Continue as Guest</span>
               </button>
             </div>
 
@@ -698,7 +735,7 @@ export default function RoutineApp() {
         </main>
       ) : (
         /* Authenticated Routine App */
-        <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 grow space-y-6">
+        <main className="max-w-6xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 pb-28 md:pb-10 grow space-y-5 sm:space-y-6">
           {activeTab === 'today' && (
             <>
               {/* Active Routine Card */}
@@ -859,6 +896,99 @@ export default function RoutineApp() {
             onClose={() => {
               setAiExecutionDialogOpen(false);
               setExecutingAiAction(null);
+            }}
+          />
+
+          {/* Mobile Bottom Navigation Dock */}
+          <nav
+            aria-label="Mobile Navigation"
+            className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur-2xl border-t border-white/10 px-2 pt-1.5 pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.6)]"
+          >
+            <div className="grid grid-cols-5 items-center gap-1 max-w-md mx-auto">
+              {[
+                { id: 'today', label: 'Day', icon: Clock },
+                { id: 'week', label: 'Week', icon: CalendarDays },
+                { id: 'month', label: 'Month', icon: Calendar },
+                { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+                { id: 'menu', label: 'Menu', icon: Menu },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isMenuTab = tab.id === 'menu';
+                const isActive = isMenuTab
+                  ? (mobileDrawerOpen || activeTab === 'settings' || activeTab === 'ai')
+                  : activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    id={`nav-tab-${tab.id}`}
+                    onClick={() => {
+                      if (isMenuTab) {
+                        setMobileDrawerOpen(true);
+                      } else {
+                        setActiveTab(tab.id as any);
+                      }
+                    }}
+                    className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all cursor-pointer min-h-[48px] ${
+                      isActive
+                        ? 'text-blue-400 font-bold bg-blue-500/10'
+                        : 'text-slate-400 hover:text-slate-200 active:bg-slate-800/40'
+                    }`}
+                  >
+                    <div className="relative">
+                      <Icon
+                        className={`w-5 h-5 transition-transform ${
+                          isActive ? 'scale-110 text-blue-400' : ''
+                        }`}
+                      />
+                      {isActive && (
+                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-[10px] mt-1 tracking-tight leading-none ${
+                        isActive ? 'text-white font-bold' : 'text-slate-400'
+                      }`}
+                    >
+                      {tab.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+
+          {/* Mobile Navigation Drawer */}
+          <MobileDrawer
+            isOpen={mobileDrawerOpen}
+            onClose={() => setMobileDrawerOpen(false)}
+            activeTab={activeTab}
+            onSelectTab={(tab) => {
+              setActiveTab(tab);
+              setMobileDrawerOpen(false);
+            }}
+            onOpenCreate={() => {
+              setMobileDrawerOpen(false);
+              handleOpenCreate();
+            }}
+            onSyncNow={async () => {
+              if (isCloudSynced && userId) {
+                showToast('Syncing with Cloud Firestore...');
+                await SyncEngine.syncNow(userId);
+                showToast('Cloud sync complete!');
+              } else {
+                showToast('Guest mode: routines stored locally on device.');
+              }
+            }}
+            onOpenAuth={(mode) => {
+              setMobileDrawerOpen(false);
+              openAuth(mode);
+            }}
+            user={user}
+            isDemoMode={isDemoMode}
+            onSignOut={async () => {
+              setMobileDrawerOpen(false);
+              await signOut();
             }}
           />
         </>

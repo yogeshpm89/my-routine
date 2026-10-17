@@ -125,23 +125,23 @@ export function ConflictBanner({ conflicts, onOpenActivity }: ConflictBannerProp
 
               {/* Action buttons if activities are linked */}
               {(conflict.activityA || conflict.activityB) && onOpenActivity && (
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
                   {conflict.activityA && (
                     <button
                       onClick={() => onOpenActivity(conflict.activityA!.templateId)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium text-[11px] border border-white/10 transition"
+                      className="min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-medium text-xs border border-white/10 transition cursor-pointer"
                     >
                       <span>Adjust {conflict.activityA.title}</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   )}
                   {conflict.activityB && (
                     <button
                       onClick={() => onOpenActivity(conflict.activityB!.templateId)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium text-[11px] border border-white/10 transition"
+                      className="min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-medium text-xs border border-white/10 transition cursor-pointer"
                     >
                       <span>Adjust {conflict.activityB.title}</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>

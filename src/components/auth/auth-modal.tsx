@@ -133,11 +133,11 @@ export function AuthModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md my-auto rounded-3xl bg-slate-900 border border-white/10 p-6 sm:p-8 shadow-2xl shadow-blue-500/10 text-slate-100 z-10"
+        className="relative w-full max-w-md my-0 sm:my-auto rounded-t-3xl sm:rounded-3xl bg-slate-900 border border-white/10 p-6 sm:p-8 shadow-2xl shadow-blue-500/10 text-slate-100 z-10 max-h-[92vh] overflow-y-auto pb-safe"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Prominent Close Button */}
@@ -145,13 +145,13 @@ export function AuthModal({
           type="button"
           onClick={onClose}
           aria-label="Close dialog"
-          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition z-20 cursor-pointer"
+          className="absolute top-4 right-4 min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition z-20 cursor-pointer flex items-center justify-center active:scale-95"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Brand Header */}
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-5 pr-10">
           <div className="w-12 h-12 rounded-2xl p-1.5 bg-slate-800 border border-white/10 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0">
             <img
               src="/logo.png"
@@ -183,7 +183,7 @@ export function AuthModal({
                 setError(null);
                 setSuccessMessage(null);
               }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${
+              className={`flex-1 min-h-[40px] py-2 text-xs font-semibold rounded-lg transition active:scale-95 flex items-center justify-center ${
                 mode === 'login'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
@@ -198,7 +198,7 @@ export function AuthModal({
                 setError(null);
                 setSuccessMessage(null);
               }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition ${
+              className={`flex-1 min-h-[40px] py-2 text-xs font-semibold rounded-lg transition active:scale-95 flex items-center justify-center ${
                 mode === 'register'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
@@ -231,9 +231,9 @@ export function AuthModal({
               type="button"
               onClick={handleGoogleSignIn}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs sm:text-sm shadow-md transition disabled:opacity-50 cursor-pointer"
+              className="w-full min-h-[44px] flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 active:scale-95 text-slate-900 font-semibold text-xs sm:text-sm shadow-md transition disabled:opacity-50 cursor-pointer"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -275,14 +275,15 @@ export function AuthModal({
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Your Name</label>
               <div className="relative">
-                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   required
+                  autoComplete="name"
                   placeholder="e.g. Yogesh Murdeshwar"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full min-h-[44px] pl-9 pr-3 py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -291,14 +292,16 @@ export function AuthModal({
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1">Email Address</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="email"
                 required
+                autoComplete="email"
+                inputMode="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-blue-500"
+                className="w-full min-h-[44px] pl-9 pr-3 py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -314,27 +317,29 @@ export function AuthModal({
                       setMode('forgot_password');
                       setError(null);
                     }}
-                    className="text-[11px] text-blue-400 hover:underline"
+                    className="text-[11px] text-blue-400 hover:underline py-1 px-1.5"
                   >
                     Forgot password?
                   </button>
                 )}
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   minLength={6}
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full min-h-[44px] pl-9 pr-11 py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -346,15 +351,16 @@ export function AuthModal({
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Confirm Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   minLength={6}
+                  autoComplete="new-password"
                   placeholder="Repeat password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full min-h-[44px] pl-9 pr-11 py-2.5 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -363,7 +369,7 @@ export function AuthModal({
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-blue-500/25 transition disabled:opacity-50 mt-3 cursor-pointer"
+            className="w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-blue-500/25 transition disabled:opacity-50 mt-3 cursor-pointer"
           >
             <span>
               {mode === 'login' && (isLoading ? 'Signing in...' : 'Sign In')}
@@ -384,44 +390,44 @@ export function AuthModal({
                 setError(null);
                 setSuccessMessage(null);
               }}
-              className="text-blue-400 font-semibold hover:underline"
+              className="min-h-[38px] px-3 py-1.5 text-blue-400 font-semibold hover:underline inline-flex items-center"
             >
               Back to Sign In
             </button>
           ) : mode === 'login' ? (
-            <p>
-              Don&apos;t have an account?{' '}
+            <div className="flex items-center flex-wrap justify-center">
+              <span>Don&apos;t have an account?</span>
               <button
                 type="button"
                 onClick={() => {
                   setMode('register');
                   setError(null);
                 }}
-                className="text-blue-400 font-semibold hover:underline ml-1"
+                className="min-h-[38px] px-2 py-1.5 text-blue-400 font-semibold hover:underline ml-1 inline-flex items-center"
               >
                 Create Account
               </button>
-            </p>
+            </div>
           ) : (
-            <p>
-              Already have an account?{' '}
+            <div className="flex items-center flex-wrap justify-center">
+              <span>Already have an account?</span>
               <button
                 type="button"
                 onClick={() => {
                   setMode('login');
                   setError(null);
                 }}
-                className="text-blue-400 font-semibold hover:underline ml-1"
+                className="min-h-[38px] px-2 py-1.5 text-blue-400 font-semibold hover:underline ml-1 inline-flex items-center"
               >
                 Sign In
               </button>
-            </p>
+            </div>
           )}
 
           <button
             type="button"
             onClick={onClose}
-            className="text-[11px] text-slate-500 hover:text-slate-300 transition mt-2 cursor-pointer"
+            className="min-h-[38px] px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 transition mt-1 cursor-pointer inline-flex items-center"
           >
             Cancel & Close
           </button>
