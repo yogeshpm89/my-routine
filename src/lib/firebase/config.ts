@@ -67,6 +67,15 @@ try {
   auth = null as unknown as Auth;
 }
 
+let functions: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getFunctions } = require('firebase/functions');
+  functions = getFunctions(app);
+} catch {
+  functions = null;
+}
+
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
   !firebaseConfig.apiKey.includes('YOUR_API_KEY') &&
@@ -90,13 +99,9 @@ export function canSyncWithFirestore(userId?: string): boolean {
   ) {
     return false;
   }
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return false;
-  }
   try {
     return Boolean(
       auth?.currentUser &&
-      !auth.currentUser.isAnonymous &&
       auth.currentUser.uid === userId
     );
   } catch {
@@ -104,4 +109,4 @@ export function canSyncWithFirestore(userId?: string): boolean {
   }
 }
 
-export { app, auth, db };
+export { app, auth, db, functions };

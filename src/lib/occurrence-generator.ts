@@ -62,11 +62,25 @@ export function generateDailyOccurrences(
   });
 
   for (const template of templates) {
-    if (!matchesRecurrence(template, targetDate)) continue;
-
     const override = overrideMap.get(template.id);
     if (override && override.isCancelled) {
       continue;
+    }
+
+    const log = logMap.get(template.id);
+
+    // If template is archived:
+    // Only generate an occurrence if an actual historical log exists for this date.
+    // Never generate unlogged future/pending occurrences for archived routines.
+    if (template.isArchived) {
+      if (!log) {
+        continue;
+      }
+    } else {
+      // Active template: must match recurrence rule unless a log already exists for this date
+      if (!matchesRecurrence(template, targetDate) && !log) {
+        continue;
+      }
     }
 
     const startTime = override?.modifiedStartTime ?? template.startTime;
@@ -75,7 +89,6 @@ export function generateDailyOccurrences(
     const notes = override?.notes ?? template.notes;
     const media = override?.modifiedMedia ?? template.media ?? [];
     const durationMinutes = calculateDuration(startTime, endTime);
-    const log = logMap.get(template.id);
 
     occurrences.push({
       occurrenceId: `${template.id}_${targetDate}`,
@@ -91,12 +104,74 @@ export function generateDailyOccurrences(
       color: template.color,
       notifications: template.notifications,
       media,
+      aiActionId: template.aiActionId,
       hasOverride: Boolean(override),
       isCancelled: false,
       isPostponed: Boolean(override?.isPostponed),
       log,
       template,
     });
+  }
+
+  // Ensure that any log on targetDate whose template was not in the passed templates
+  // is still recovered and rendered in historical calendar/analytics
+  const processedTemplateIds = new Set(occurrences.map((o) => o.templateId));
+  for (const [templateId, log] of logMap.entries()) {
+    if (!processedTemplateIds.has(templateId)) {
+      const override = overrideMap.get(templateId);
+      if (override && override.isCancelled) continue;
+
+      const startTime = override?.modifiedStartTime ?? log.actualStartTime ?? '09:00';
+      const endTime = override?.modifiedEndTime ?? log.actualEndTime ?? '10:00';
+      const durationMinutes =
+        log.actualDurationMinutes > 0
+          ? log.actualDurationMinutes
+          : calculateDuration(startTime, endTime);
+
+      const fallbackTemplate: RoutineTemplate = {
+        id: templateId,
+        userId: log.userId,
+        title: override?.modifiedTitle ?? 'Archived Activity',
+        category: 'other',
+        startTime,
+        endTime,
+        isFixed: false,
+        recurrence: {
+          frequency: 'once',
+          startDate: targetDate,
+          daysOfWeek: [],
+          exceptions: [],
+        },
+        notifications: [],
+        notes: log.completionNotes || '',
+        color: '#64748b',
+        timezone: 'Asia/Kolkata',
+        isArchived: true,
+        createdAt: log.updatedAt,
+        updatedAt: log.updatedAt,
+      };
+
+      occurrences.push({
+        occurrenceId: `${templateId}_${targetDate}`,
+        templateId,
+        date: targetDate,
+        title: fallbackTemplate.title,
+        category: fallbackTemplate.category,
+        startTime,
+        endTime,
+        durationMinutes,
+        isFixed: false,
+        notes: log.completionNotes || '',
+        color: fallbackTemplate.color,
+        notifications: [],
+        media: [],
+        hasOverride: Boolean(override),
+        isCancelled: false,
+        isPostponed: Boolean(override?.isPostponed),
+        log,
+        template: fallbackTemplate,
+      });
+    }
   }
 
   // Sort chronologically by startTime

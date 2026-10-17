@@ -4,6 +4,7 @@ import { LogRepository } from '@/lib/repositories/log-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import { getInitialRoutineTemplates, getInitialGoalTargets } from '@/lib/seed-data';
+import { canSyncWithFirestore } from '@/lib/firebase/config';
 import {
   RoutineTemplate,
   OccurrenceOverride,
@@ -64,20 +65,36 @@ export class BackupService {
       }
 
       if (mode === 'replace') {
-        RoutineRepository.saveLocalTemplates(userId, data.templates.map((t) => ({ ...t, userId })));
-        OverrideRepository.saveLocalOverrides(userId, (data.overrides || []).map((o) => ({ ...o, userId })));
-        LogRepository.saveLocalLogs(userId, (data.logs || []).map((l) => ({ ...l, userId })));
-        GoalRepository.saveLocalGoals(userId, (data.goals || []).map((g) => ({ ...g, userId })));
+        const preparedTemplates = data.templates.map((t) => ({ ...t, userId }));
+        const preparedOverrides = (data.overrides || []).map((o) => ({ ...o, userId }));
+        const preparedLogs = (data.logs || []).map((l) => ({ ...l, userId }));
+        const preparedGoals = (data.goals || []).map((g) => ({ ...g, userId }));
+
+        RoutineRepository.saveLocalTemplates(userId, preparedTemplates);
+        OverrideRepository.saveLocalOverrides(userId, preparedOverrides);
+        LogRepository.saveLocalLogs(userId, preparedLogs);
+        GoalRepository.saveLocalGoals(userId, preparedGoals);
+
+        if (canSyncWithFirestore(userId)) {
+          preparedTemplates.forEach((t) => RoutineRepository.saveTemplate(t).catch(console.warn));
+          preparedOverrides.forEach((o) => OverrideRepository.saveOverride(o).catch(console.warn));
+          preparedLogs.forEach((l) => LogRepository.saveLog(l).catch(console.warn));
+          preparedGoals.forEach((g) => GoalRepository.saveGoal(g).catch(console.warn));
+        }
       } else {
         // Merge mode
         const existingTemplates = RoutineRepository.getLocalTemplates(userId);
         const mergedTemplates = [...existingTemplates];
         (data.templates || []).forEach((newT) => {
           const idx = mergedTemplates.findIndex((t) => t.id === newT.id);
+          const item = { ...newT, userId };
           if (idx >= 0) {
-            mergedTemplates[idx] = { ...newT, userId };
+            mergedTemplates[idx] = item;
           } else {
-            mergedTemplates.push({ ...newT, userId });
+            mergedTemplates.push(item);
+          }
+          if (canSyncWithFirestore(userId)) {
+            RoutineRepository.saveTemplate(item).catch(console.warn);
           }
         });
         RoutineRepository.saveLocalTemplates(userId, mergedTemplates);
@@ -85,7 +102,7 @@ export class BackupService {
 
       return {
         success: true,
-        message: 'Backup imported successfully',
+        message: 'Backup imported successfully and synced to Firebase',
         counts: {
           templates: data.templates.length,
           logs: data.logs?.length || 0,
@@ -106,13 +123,28 @@ export class BackupService {
     LogRepository.saveLocalLogs(userId, []);
     GoalRepository.saveLocalGoals(userId, initialGoals);
     MutationQueue.clear(userId);
+
+    if (canSyncWithFirestore(userId)) {
+      initialTemplates.forEach((t) => RoutineRepository.saveTemplate(t).catch(console.warn));
+      initialGoals.forEach((g) => GoalRepository.saveGoal(g).catch(console.warn));
+    }
   }
 
   static deleteAllUserData(userId: string): void {
+    const existingTemplates = RoutineRepository.getLocalTemplates(userId);
+    const existingOverrides = OverrideRepository.getLocalOverrides(userId);
+    const existingGoals = GoalRepository.getLocalGoals(userId);
+
     RoutineRepository.saveLocalTemplates(userId, []);
     OverrideRepository.saveLocalOverrides(userId, []);
     LogRepository.saveLocalLogs(userId, []);
     GoalRepository.saveLocalGoals(userId, []);
     MutationQueue.clear(userId);
+
+    if (canSyncWithFirestore(userId)) {
+      existingTemplates.forEach((t) => RoutineRepository.deleteTemplate(userId, t.id).catch(console.warn));
+      existingOverrides.forEach((o) => OverrideRepository.deleteOverride(userId, o.id).catch(console.warn));
+      existingGoals.forEach((g) => GoalRepository.deleteGoal(userId, g.id).catch(console.warn));
+    }
   }
 }

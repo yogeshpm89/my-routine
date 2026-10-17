@@ -8,8 +8,7 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
-  query,
-  where,
+  onSnapshot,
 } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'my_routine_templates_';
@@ -28,7 +27,11 @@ export class RoutineRepository {
       const guestRaw = userId !== 'local-default-user' ? localStorage.getItem(this.getLocalKey('local-default-user')) : null;
       if (guestRaw) {
         try {
-          const guestTemplates = (JSON.parse(guestRaw) as RoutineTemplate[]).map((t) => ({ ...t, userId }));
+          const guestTemplates = (JSON.parse(guestRaw) as RoutineTemplate[]).map((t) => ({
+            ...t,
+            userId,
+            isArchived: t.isArchived ?? false,
+          }));
           this.saveLocalTemplates(userId, guestTemplates);
           return guestTemplates;
         } catch {
@@ -40,10 +43,22 @@ export class RoutineRepository {
       return initial;
     }
     try {
-      return JSON.parse(raw) as RoutineTemplate[];
+      const parsed = JSON.parse(raw) as RoutineTemplate[];
+      return parsed.map((t) => ({
+        ...t,
+        isArchived: t.isArchived ?? false,
+      }));
     } catch {
       return getInitialRoutineTemplates(userId);
     }
+  }
+
+  static getActiveLocalTemplates(userId: string): RoutineTemplate[] {
+    return this.getLocalTemplates(userId).filter((t) => !t.isArchived);
+  }
+
+  static getArchivedLocalTemplates(userId: string): RoutineTemplate[] {
+    return this.getLocalTemplates(userId).filter((t) => Boolean(t.isArchived));
   }
 
   static saveLocalTemplates(userId: string, templates: RoutineTemplate[]): void {
@@ -55,16 +70,35 @@ export class RoutineRepository {
     // 1. Fetch from local cache first for instant responsiveness
     const local = this.getLocalTemplates(userId);
 
-    // 2. If Firebase is configured and online, sync from Firestore
+    // 2. If Firebase is configured and online, sync all templates (including archived)
     if (canSyncWithFirestore(userId)) {
       try {
         const templatesCol = collection(db, `users/${userId}/templates`);
-        const snapshot = await getDocs(query(templatesCol, where('isArchived', '==', false)));
+        const snapshot = await getDocs(templatesCol);
         if (!snapshot.empty) {
           const remoteTemplates: RoutineTemplate[] = [];
-          snapshot.forEach((d) => remoteTemplates.push(d.data() as RoutineTemplate));
-          this.saveLocalTemplates(userId, remoteTemplates);
-          return remoteTemplates;
+          snapshot.forEach((d) => {
+            const data = d.data() as RoutineTemplate;
+            remoteTemplates.push({
+              ...data,
+              isArchived: data.isArchived ?? false,
+            });
+          });
+          const pendingIds = new Set(
+            MutationQueue.getQueue(userId)
+              .filter((m) => m.collection === 'templates')
+              .map((m) => m.docId)
+          );
+          const mergedMap = new Map<string, RoutineTemplate>();
+          remoteTemplates.forEach((t) => mergedMap.set(t.id, t));
+          local.forEach((t) => {
+            if (pendingIds.has(t.id) || !mergedMap.has(t.id)) {
+              mergedMap.set(t.id, t);
+            }
+          });
+          const merged = Array.from(mergedMap.values());
+          this.saveLocalTemplates(userId, merged);
+          return merged;
         } else if (local.length > 0) {
           // If remote is empty, seed local templates up to Firestore
           for (const t of local) {
@@ -77,6 +111,103 @@ export class RoutineRepository {
     }
 
     return local;
+  }
+
+  static subscribeTemplates(
+    userId: string,
+    onData: (templates: RoutineTemplate[]) => void,
+    onError?: (error: unknown) => void
+  ): () => void {
+    const local = this.getLocalTemplates(userId);
+    onData(local);
+
+    if (!canSyncWithFirestore(userId)) {
+      return () => {};
+    }
+
+    try {
+      const templatesCol = collection(db, `users/${userId}/templates`);
+      const unsubscribe = onSnapshot(
+        templatesCol,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const remoteTemplates: RoutineTemplate[] = [];
+            snapshot.forEach((d) => {
+              const data = d.data() as RoutineTemplate;
+              remoteTemplates.push({
+                ...data,
+                isArchived: data.isArchived ?? false,
+              });
+            });
+            const pendingIds = new Set(
+              MutationQueue.getQueue(userId)
+                .filter((m) => m.collection === 'templates')
+                .map((m) => m.docId)
+            );
+            const localTemplates = this.getLocalTemplates(userId);
+            const mergedMap = new Map<string, RoutineTemplate>();
+            remoteTemplates.forEach((t) => mergedMap.set(t.id, t));
+            localTemplates.forEach((t) => {
+              if (pendingIds.has(t.id) || !mergedMap.has(t.id)) {
+                mergedMap.set(t.id, t);
+              }
+            });
+            const merged = Array.from(mergedMap.values());
+            this.saveLocalTemplates(userId, merged);
+            onData(merged);
+          } else if (local.length > 0) {
+            for (const t of local) {
+              setDoc(doc(db, `users/${userId}/templates`, t.id), t).catch(console.warn);
+            }
+          } else {
+            this.saveLocalTemplates(userId, []);
+            onData([]);
+          }
+        },
+        (err) => {
+          console.warn('Realtime template listener error:', err);
+          if (onError) onError(err);
+        }
+      );
+
+      return unsubscribe;
+    } catch (err) {
+      console.warn('Failed to attach realtime template listener:', err);
+      if (onError) onError(err);
+      return () => {};
+    }
+  }
+
+  static async archiveTemplate(userId: string, templateId: string): Promise<RoutineTemplate | null> {
+    const templates = this.getLocalTemplates(userId);
+    const target = templates.find((t) => t.id === templateId);
+    if (!target) return null;
+
+    const archived: RoutineTemplate = {
+      ...target,
+      isArchived: true,
+      archivedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await this.saveTemplate(archived);
+    return archived;
+  }
+
+  static async unarchiveTemplate(userId: string, templateId: string): Promise<RoutineTemplate | null> {
+    const templates = this.getLocalTemplates(userId);
+    const target = templates.find((t) => t.id === templateId);
+    if (!target) return null;
+
+    const restored: RoutineTemplate = {
+      ...target,
+      isArchived: false,
+      archivedAt: null,
+      updatedAt: Date.now(),
+    };
+
+    await this.saveTemplate(restored);
+    return restored;
   }
 
   static async saveTemplate(template: RoutineTemplate): Promise<void> {
@@ -152,9 +283,10 @@ export class RoutineRepository {
     const target = templates.find((t) => t.id === templateId);
     if (!target) return;
 
-    await this.saveTemplate({
-      ...target,
-      isArchived: !target.isArchived,
-    });
+    if (target.isArchived) {
+      await this.unarchiveTemplate(userId, templateId);
+    } else {
+      await this.archiveTemplate(userId, templateId);
+    }
   }
 }

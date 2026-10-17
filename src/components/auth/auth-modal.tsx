@@ -13,7 +13,6 @@ import {
   X,
   Eye,
   EyeOff,
-  Clock,
   Sparkles,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -153,8 +152,12 @@ export function AuthModal({
 
         {/* Brand Header */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="p-3 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-md shadow-blue-500/20">
-            <Clock className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 rounded-2xl p-1.5 bg-slate-800 border border-white/10 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0">
+            <img
+              src="/logo.png"
+              alt="My Routine Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <h2 className="text-xl font-bold text-white tracking-tight">

@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   title: 'My Routine — Adaptive Schedule & Focus Engine',
   description:
     'Production personal routine management with flexible daily schedules, conflict detection, category time targets, and Zepp/Amazfit smartwatch alerts.',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({

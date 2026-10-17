@@ -27,3 +27,15 @@ export interface ScheduledNotificationItem {
     triggerType: string;
   };
 }
+
+export interface NotificationDiagnostics {
+  permissionGranted: boolean;
+  scheduledCount: number;
+  lastReconciliationTime: number | null;
+  nextScheduledTime: number | null;
+  nextScheduledTitle: string | null;
+  windowEndDate: string;
+  isNative: boolean;
+  quietHoursActiveNow: boolean;
+}
+

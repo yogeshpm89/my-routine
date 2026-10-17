@@ -74,10 +74,12 @@ export const RoutineTemplateSchema = z.object({
   recurrence: RecurrenceRuleSchema,
   notifications: z.array(NotificationRuleSchema).default([]),
   media: z.array(MediaAttachmentSchema).optional(),
+  aiActionId: z.string().optional(),
   notes: z.string().default(''),
   color: z.string().default('#3b82f6'),
   timezone: z.string().default('Asia/Kolkata'),
   isArchived: z.boolean().default(false),
+  archivedAt: z.number().nullable().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -157,6 +159,7 @@ export interface ActivityOccurrence {
   color: string;
   notifications: NotificationRule[];
   media?: MediaAttachment[];
+  aiActionId?: string;
   hasOverride: boolean;
   isCancelled: boolean;
   isPostponed: boolean;

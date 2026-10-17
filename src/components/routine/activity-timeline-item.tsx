@@ -32,6 +32,7 @@ interface ActivityTimelineItemProps {
   onDuplicate: (occurrence: ActivityOccurrence) => void;
   onDelete: (occurrence: ActivityOccurrence) => void;
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
+  onExecuteAi?: (occurrence: ActivityOccurrence) => void;
 }
 
 export function ActivityTimelineItem({
@@ -42,6 +43,7 @@ export function ActivityTimelineItem({
   onDuplicate,
   onDelete,
   onPlayMedia,
+  onExecuteAi,
 }: ActivityTimelineItemProps) {
   const status = occurrence.log?.status ?? 'pending';
 
@@ -213,12 +215,22 @@ export function ActivityTimelineItem({
 
           {/* Action Button Strip */}
           <div className="flex items-center gap-1 shrink-0">
+            {occurrence.aiActionId && (
+              <button
+                type="button"
+                onClick={() => onExecuteAi?.(occurrence)}
+                title="Execute attached AI Routine Action"
+                className="p-1.5 rounded-lg text-purple-400 hover:text-purple-300 hover:bg-purple-950/40 transition cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+            )}
             {occurrence.media && occurrence.media.length > 0 && (
               <button
                 type="button"
                 onClick={() => onPlayMedia?.(occurrence, 0)}
                 title={`Play attached media (${occurrence.media.length})`}
-                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition"
+                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current" />
               </button>
@@ -282,9 +294,10 @@ export function ActivityTimelineItem({
               <Copy className="w-3.5 h-3.5" />
             </button>
             <button
+              id={`btn-delete-occurrence-${occurrence.templateId}`}
               onClick={() => onDelete(occurrence)}
               title="Delete activity"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>

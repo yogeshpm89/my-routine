@@ -10,6 +10,7 @@ import {
   deleteDoc,
   query,
   where,
+  onSnapshot,
 } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'my_routine_goals_';
@@ -49,6 +50,55 @@ export class GoalRepository {
   static saveLocalGoals(userId: string, goals: GoalTarget[]): void {
     if (typeof window === 'undefined') return;
     localStorage.setItem(this.getLocalKey(userId), JSON.stringify(goals));
+  }
+
+  static subscribeGoals(
+    userId: string,
+    onData: (goals: GoalTarget[]) => void,
+    onError?: (error: any) => void
+  ): () => void {
+    const local = this.getLocalGoals(userId);
+    onData(local);
+
+    if (!canSyncWithFirestore(userId)) {
+      return () => {};
+    }
+
+    try {
+      const colRef = collection(db, `users/${userId}/goals`);
+      const unsubscribe = onSnapshot(
+        colRef,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const remote: GoalTarget[] = [];
+            snapshot.forEach((d) => {
+              const data = d.data() as GoalTarget;
+              if (!data.isArchived) {
+                remote.push(data);
+              }
+            });
+            this.saveLocalGoals(userId, remote);
+            onData(remote);
+          } else if (local.length > 0) {
+            for (const g of local) {
+              setDoc(doc(db, `users/${userId}/goals`, g.id), g).catch(console.warn);
+            }
+          } else {
+            this.saveLocalGoals(userId, []);
+            onData([]);
+          }
+        },
+        (err) => {
+          console.warn('Realtime goal listener error:', err);
+          if (onError) onError(err);
+        }
+      );
+      return unsubscribe;
+    } catch (err) {
+      console.warn('Failed to attach realtime goal listener:', err);
+      if (onError) onError(err);
+      return () => {};
+    }
   }
 
   static async getGoals(userId: string): Promise<GoalTarget[]> {

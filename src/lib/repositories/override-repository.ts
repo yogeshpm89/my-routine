@@ -9,6 +9,7 @@ import {
   deleteDoc,
   query,
   where,
+  onSnapshot,
 } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'my_routine_overrides_';
@@ -46,6 +47,55 @@ export class OverrideRepository {
     localStorage.setItem(this.getLocalKey(userId), JSON.stringify(overrides));
   }
 
+  static subscribeOverrides(
+    userId: string,
+    onData: (overrides: OccurrenceOverride[]) => void,
+    onError?: (error: unknown) => void
+  ): () => void {
+    const local = this.getLocalOverrides(userId);
+    onData(local);
+
+    if (!canSyncWithFirestore(userId)) {
+      return () => {};
+    }
+
+    try {
+      const colRef = collection(db, `users/${userId}/overrides`);
+      const unsubscribe = onSnapshot(
+        colRef,
+        (snapshot) => {
+          const remote: OccurrenceOverride[] = [];
+          snapshot.forEach((d) => remote.push(d.data() as OccurrenceOverride));
+          const pendingIds = new Set(
+            MutationQueue.getQueue(userId)
+              .filter((m) => m.collection === 'overrides')
+              .map((m) => m.docId)
+          );
+          const localOverrides = this.getLocalOverrides(userId);
+          const mergedMap = new Map<string, OccurrenceOverride>();
+          remote.forEach((o) => mergedMap.set(o.id, o));
+          localOverrides.forEach((o) => {
+            if (pendingIds.has(o.id) || !mergedMap.has(o.id)) {
+              mergedMap.set(o.id, o);
+            }
+          });
+          const merged = Array.from(mergedMap.values());
+          this.saveLocalOverrides(userId, merged);
+          onData(merged);
+        },
+        (err) => {
+          console.warn('Realtime override listener error:', err);
+          if (onError) onError(err);
+        }
+      );
+      return unsubscribe;
+    } catch (err) {
+      console.warn('Failed to attach realtime override listener:', err);
+      if (onError) onError(err);
+      return () => {};
+    }
+  }
+
   static async getOverridesForDate(userId: string, date: string): Promise<OccurrenceOverride[]> {
     const local = this.getLocalOverrides(userId).filter((o) => o.date === date);
 
@@ -56,10 +106,22 @@ export class OverrideRepository {
         if (!snapshot.empty) {
           const remote: OccurrenceOverride[] = [];
           snapshot.forEach((d) => remote.push(d.data() as OccurrenceOverride));
-          // Merge with local
+          const pendingIds = new Set(
+            MutationQueue.getQueue(userId)
+              .filter((m) => m.collection === 'overrides')
+              .map((m) => m.docId)
+          );
+          const mergedMap = new Map<string, OccurrenceOverride>();
+          remote.forEach((o) => mergedMap.set(o.id, o));
+          local.forEach((o) => {
+            if (pendingIds.has(o.id) || !mergedMap.has(o.id)) {
+              mergedMap.set(o.id, o);
+            }
+          });
+          const mergedForDate = Array.from(mergedMap.values());
           const all = this.getLocalOverrides(userId).filter((o) => o.date !== date);
-          this.saveLocalOverrides(userId, [...all, ...remote]);
-          return remote;
+          this.saveLocalOverrides(userId, [...all, ...mergedForDate]);
+          return mergedForDate;
         }
       } catch (err) {
         console.warn('Failed to fetch overrides from Firestore:', err);

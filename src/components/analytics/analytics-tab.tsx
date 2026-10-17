@@ -22,24 +22,35 @@ import {
   AlertCircle,
   Calendar,
   Layers,
+  Plus,
+  Edit2,
 } from 'lucide-react';
+import { GoalEditorDialog } from './goal-editor-dialog';
 
 interface AnalyticsTabProps {
+  userId?: string;
   selectedDate: string;
   templates: RoutineTemplate[];
   overrides: OccurrenceOverride[];
   logs: ActivityLog[];
   goals: GoalTarget[];
+  onSaveGoal?: (goal: GoalTarget) => void;
+  onDeleteGoal?: (goalId: string) => void;
 }
 
 export function AnalyticsTab({
+  userId = '',
   selectedDate,
   templates,
   overrides,
   logs,
   goals,
+  onSaveGoal,
+  onDeleteGoal,
 }: AnalyticsTabProps) {
   const [timeframe, setTimeframe] = useState<'day' | 'week'>('day');
+  const [goalEditorOpen, setGoalEditorOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<GoalTarget | null>(null);
 
   // Compute occurrences based on timeframe
   let occurrences: ActivityOccurrence[] = [];
@@ -188,14 +199,29 @@ export function AnalyticsTab({
 
       {/* Goal Targets Fulfillment Meters */}
       <div className="p-5 sm:p-6 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-white/5">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/5">
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5 text-amber-400" />
             <h3 className="text-base font-bold text-white">Daily & Weekly Time Targets</h3>
           </div>
-          <span className="text-xs text-slate-400">
-            {summary.goalFulfillments.length} targets tracked
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400 hidden sm:inline">
+              {summary.goalFulfillments.length} targets tracked
+            </span>
+            {onSaveGoal && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingGoal(null);
+                  setGoalEditorOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold border border-blue-500/30 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Target</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -210,25 +236,42 @@ export function AnalyticsTab({
             return (
               <div
                 key={gf.goal.id}
-                className="p-3.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-2"
+                className="p-3.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-2 group hover:border-white/10 transition"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="text-sm font-bold text-white block">
-                      {gf.goal.title}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Target: {formatDuration(gf.targetMinutes)} • Planned:{' '}
-                      {formatDuration(gf.plannedMinutes)} • Logged:{' '}
-                      <strong className="text-emerald-400">{formatDuration(gf.actualMinutes)}</strong>
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <span className="text-sm font-bold text-white block">
+                        {gf.goal.title}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Target: {formatDuration(gf.targetMinutes)} • Planned:{' '}
+                        {formatDuration(gf.plannedMinutes)} • Logged:{' '}
+                        <strong className="text-emerald-400">{formatDuration(gf.actualMinutes)}</strong>
+                      </span>
+                    </div>
                   </div>
 
-                  <span
-                    className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${statusConfig.bg}`}
-                  >
-                    {statusConfig.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${statusConfig.bg}`}
+                    >
+                      {statusConfig.label}
+                    </span>
+                    {onSaveGoal && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingGoal(gf.goal);
+                          setGoalEditorOpen(true);
+                        }}
+                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/60 transition cursor-pointer"
+                        title="Edit goal target"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Progress bar */}
@@ -301,6 +344,20 @@ export function AnalyticsTab({
           })}
         </div>
       </div>
+
+      {onSaveGoal && (
+        <GoalEditorDialog
+          isOpen={goalEditorOpen}
+          userId={userId}
+          initialGoal={editingGoal}
+          onSave={onSaveGoal}
+          onDelete={onDeleteGoal}
+          onClose={() => {
+            setGoalEditorOpen(false);
+            setEditingGoal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,11 +3,12 @@ import { LocalNotifications, LocalNotificationSchema } from '@capacitor/local-no
 import {
   RoutineTemplate,
   OccurrenceOverride,
-  ActivityOccurrence,
+  ActivityLog,
 } from '@/types/routine';
 import {
   NotificationPreferences,
   ScheduledNotificationItem,
+  NotificationDiagnostics,
 } from '@/types/notifications';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { LogRepository } from '@/lib/repositories/log-repository';
@@ -16,21 +17,24 @@ import {
   timeToMinutes,
   formatTime12Hour,
   getTodayDateString,
+  getCurrentTimeString,
 } from '@/lib/time-utils';
 
 export const NOTIFICATION_CHANNEL_ID = 'routine_reminders';
 export const ACTION_TYPE_ROUTINE = 'ROUTINE_ACTIONS';
 
 const NOTIFICATION_REGISTRY_KEY = 'my_routine_notif_registry_';
+const NOTIFICATION_DIAGNOSTICS_KEY = 'my_routine_notif_diagnostics_';
 
-// Deterministic 32-bit positive integer hash for notification IDs
+// Deterministic 32-bit positive integer hash for notification IDs in range [1, 2147483646]
 export function generateNotificationId(key: string): number {
   let hash = 0;
   for (let i = 0; i < key.length; i++) {
     hash = (hash << 5) - hash + key.charCodeAt(i);
     hash |= 0;
   }
-  return Math.abs(hash) % 2147483647;
+  const positive = Math.abs(hash) % 2147483647;
+  return positive === 0 ? 1 : positive;
 }
 
 export function isQuietHour(
@@ -101,7 +105,7 @@ export class NotificationManager {
         ],
       });
 
-      // 3. Listen to Notification Action Events
+      // 3. Listen to Notification Action Events (Done, Snooze, Skip)
       LocalNotifications.addListener('localNotificationActionPerformed', async (notificationAction) => {
         const extra = notificationAction.notification.extra;
         const actionId = notificationAction.actionId;
@@ -110,19 +114,34 @@ export class NotificationManager {
 
         const { templateId, date } = extra;
 
-        if (actionId === 'COMPLETE') {
-          await LogRepository.updateStatus(userId, date, templateId, 'completed');
-        } else if (actionId === 'SKIP') {
-          await LogRepository.updateStatus(userId, date, templateId, 'skipped');
+        if (actionId === 'COMPLETE' || actionId === 'SKIP') {
+          const status = actionId === 'COMPLETE' ? 'completed' : 'skipped';
+          await LogRepository.updateStatus(userId, date, templateId, status);
+
+          // Cancel remaining alarms for this completed/skipped occurrence
+          try {
+            const pending = await LocalNotifications.getPending();
+            const toCancel = pending.notifications.filter(
+              (n) => n.extra?.templateId === templateId && n.extra?.date === date
+            );
+            if (toCancel.length > 0) {
+              await LocalNotifications.cancel({ notifications: toCancel });
+            }
+          } catch (err) {
+            console.warn('Failed to clear pending notifications after action:', err);
+          }
         } else if (actionId === 'SNOOZE') {
-          // Schedule a snooze reminder 10 minutes from now
-          const snoozeTimestamp = Date.now() + 10 * 60 * 1000;
+          // Schedule a snooze reminder 10 minutes from now (deterministic ID prevents duplicate snooze entries)
+          const snoozeMinutes = 10;
+          const snoozeTimestamp = Date.now() + snoozeMinutes * 60 * 1000;
+          const snoozeId = generateNotificationId(`${templateId}_${date}_snooze`);
+
           await LocalNotifications.schedule({
             notifications: [
               {
-                id: generateNotificationId(`${templateId}_${date}_snooze_${Date.now()}`),
-                title: `Snoozed: ${notificationAction.notification.title}`,
-                body: `Snoozed routine reminder ready for completion.`,
+                id: snoozeId,
+                title: `Snoozed: ${notificationAction.notification.title.replace(/^Snoozed:\s*/, '')}`,
+                body: `Snoozed reminder ready for completion.`,
                 schedule: { at: new Date(snoozeTimestamp) },
                 channelId: NOTIFICATION_CHANNEL_ID,
                 actionTypeId: ACTION_TYPE_ROUTINE,
@@ -161,19 +180,29 @@ export class NotificationManager {
     templates: RoutineTemplate[],
     overrides: OccurrenceOverride[],
     prefs: NotificationPreferences,
-    baseDate: string = getTodayDateString('Asia/Kolkata')
+    baseDate: string = getTodayDateString('Asia/Kolkata'),
+    logs: ActivityLog[] = []
   ): ScheduledNotificationItem[] {
     const scheduledItems: ScheduledNotificationItem[] = [];
     const nowTimestamp = Date.now();
+    // 72-hour window boundary (3 days)
+    const maxWindowTimestamp = nowTimestamp + 72 * 60 * 60 * 1000;
+
+    // Filter out archived templates upfront - archived routines must never schedule future reminders
+    const activeTemplates = templates.filter((t) => !t.isArchived);
 
     // Rolling 3 days (Today, Tomorrow, Day after)
     const dates = [baseDate, addDays(baseDate, 1), addDays(baseDate, 2)];
 
     for (const dateStr of dates) {
-      const occurrences = generateDailyOccurrences(templates, overrides, [], dateStr);
+      const occurrences = generateDailyOccurrences(activeTemplates, overrides, logs, dateStr);
 
       for (const occ of occurrences) {
+        // Skip cancelled occurrences
         if (occ.isCancelled) continue;
+
+        // Skip occurrences that are already completed or skipped
+        if (occ.log?.status === 'completed' || occ.log?.status === 'skipped') continue;
 
         const notifRules = occ.notifications || [];
 
@@ -186,19 +215,19 @@ export class NotificationManager {
           }
 
           const [h, m] = targetTime.split(':').map(Number);
-          // Calculate scheduled timestamp for this date and time in Asia/Kolkata timezone
-          // Parse dateStr (YYYY-MM-DD)
           const [yr, mo, dy] = dateStr.split('-').map(Number);
 
-          // Calculate offset in minutes
           const offsetMinutes = rule.offsetMinutes || 0;
           const targetTotalMinutes = h * 60 + m + offsetMinutes;
 
           const scheduledDate = new Date(yr, mo - 1, dy, 0, targetTotalMinutes, 0, 0);
           const scheduledTimestamp = scheduledDate.getTime();
 
-          // If in the past, skip
+          // If in the past, skip (past reminders are never recreated)
           if (scheduledTimestamp <= nowTimestamp) continue;
+
+          // If beyond the 72-hour rolling window, skip
+          if (scheduledTimestamp > maxWindowTimestamp) continue;
 
           // Check Quiet Hours
           if (prefs.quietHoursEnabled) {
@@ -237,7 +266,7 @@ export class NotificationManager {
       }
     }
 
-    // Sort by scheduledTimestamp ascending
+    // Sort chronologically ascending
     scheduledItems.sort((a, b) => a.scheduledTimestamp - b.scheduledTimestamp);
     return scheduledItems;
   }
@@ -258,38 +287,100 @@ export class NotificationManager {
     localStorage.setItem(`${NOTIFICATION_REGISTRY_KEY}${userId}`, JSON.stringify(items));
   }
 
+  static getDiagnostics(userId: string): NotificationDiagnostics {
+    const fallback: NotificationDiagnostics = {
+      permissionGranted: false,
+      scheduledCount: 0,
+      lastReconciliationTime: null,
+      nextScheduledTime: null,
+      nextScheduledTitle: null,
+      windowEndDate: addDays(getTodayDateString('Asia/Kolkata'), 2),
+      isNative: this.isNative(),
+      quietHoursActiveNow: false,
+    };
+
+    if (typeof window === 'undefined') return fallback;
+
+    const raw = localStorage.getItem(`${NOTIFICATION_DIAGNOSTICS_KEY}${userId}`);
+    if (!raw) return fallback;
+
+    try {
+      return JSON.parse(raw) as NotificationDiagnostics;
+    } catch {
+      return fallback;
+    }
+  }
+
+  static saveDiagnostics(userId: string, diagnostics: NotificationDiagnostics): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(`${NOTIFICATION_DIAGNOSTICS_KEY}${userId}`, JSON.stringify(diagnostics));
+  }
+
   static async reconcileNotifications(
     userId: string,
     templates: RoutineTemplate[],
     overrides: OccurrenceOverride[],
-    prefs: NotificationPreferences
+    prefs: NotificationPreferences,
+    logs: ActivityLog[] = []
   ): Promise<{ scheduled: number; cancelled: number }> {
-    const targetItems = this.compute72HourSchedule(templates, overrides, prefs);
+    const baseDate = getTodayDateString('Asia/Kolkata');
+    const targetItems = this.compute72HourSchedule(templates, overrides, prefs, baseDate, logs);
     this.saveLocalRegistry(userId, targetItems);
 
+    const now = getCurrentTimeString('Asia/Kolkata');
+    const quietActive = prefs.quietHoursEnabled && isQuietHour(now, prefs.quietHoursStart, prefs.quietHoursEnd);
+
     if (!this.isNative()) {
+      // In web/desktop, update diagnostic state and return
+      this.saveDiagnostics(userId, {
+        permissionGranted: typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted',
+        scheduledCount: targetItems.length,
+        lastReconciliationTime: Date.now(),
+        nextScheduledTime: targetItems[0]?.scheduledTimestamp ?? null,
+        nextScheduledTitle: targetItems[0]?.title ?? null,
+        windowEndDate: addDays(baseDate, 2),
+        isNative: false,
+        quietHoursActiveNow: quietActive,
+      });
       return { scheduled: targetItems.length, cancelled: 0 };
     }
 
     try {
       await this.initialize(userId);
 
-      // Get pending notifications currently queued in native Android AlarmManager
+      // Query pending alarms currently registered in native Android AlarmManager
       const pending = await LocalNotifications.getPending();
-      const pendingIds = new Set(pending.notifications.map((n) => n.id));
-      const targetIds = new Set(targetItems.map((n) => n.id));
+      const pendingMap = new Map<number, LocalNotificationSchema>();
+      pending.notifications.forEach((n) => pendingMap.set(n.id, n));
 
-      // Obsolete IDs to cancel
-      const toCancel: LocalNotificationSchema[] = pending.notifications.filter(
-        (n) => !targetIds.has(n.id)
-      );
+      const toCancel: LocalNotificationSchema[] = [];
+      const toScheduleItems: ScheduledNotificationItem[] = [];
+
+      for (const item of targetItems) {
+        const existing = pendingMap.get(item.id);
+        if (!existing) {
+          toScheduleItems.push(item);
+        } else {
+          // If scheduled timestamp has shifted (e.g. routine time edit), replace it
+          const existingTime = existing.schedule?.at ? new Date(existing.schedule.at).getTime() : 0;
+          if (Math.abs(existingTime - item.scheduledTimestamp) > 1000) {
+            toCancel.push(existing);
+            toScheduleItems.push(item);
+          }
+        }
+      }
+
+      // Cancel obsolete alarms no longer present in target schedule
+      const targetIds = new Set(targetItems.map((n) => n.id));
+      for (const p of pending.notifications) {
+        if (!targetIds.has(p.id)) {
+          toCancel.push(p);
+        }
+      }
 
       if (toCancel.length > 0) {
         await LocalNotifications.cancel({ notifications: toCancel });
       }
-
-      // Items to schedule (not already scheduled)
-      const toScheduleItems = targetItems.filter((item) => !pendingIds.has(item.id));
 
       if (toScheduleItems.length > 0) {
         const schemaList: LocalNotificationSchema[] = toScheduleItems.map((item) => ({
@@ -305,6 +396,21 @@ export class NotificationManager {
         await LocalNotifications.schedule({ notifications: schemaList });
       }
 
+      // Read back final pending count for diagnostics
+      const activePending = await LocalNotifications.getPending();
+      const hasPermission = await this.checkPermissions();
+
+      this.saveDiagnostics(userId, {
+        permissionGranted: hasPermission,
+        scheduledCount: activePending.notifications.length,
+        lastReconciliationTime: Date.now(),
+        nextScheduledTime: targetItems[0]?.scheduledTimestamp ?? null,
+        nextScheduledTitle: targetItems[0]?.title ?? null,
+        windowEndDate: addDays(baseDate, 2),
+        isNative: true,
+        quietHoursActiveNow: quietActive,
+      });
+
       return {
         scheduled: toScheduleItems.length,
         cancelled: toCancel.length,
@@ -317,11 +423,10 @@ export class NotificationManager {
 
   static async sendTestNotification(): Promise<boolean> {
     if (!this.isNative()) {
-      // In web browser, test standard browser notification if permitted
       if ('Notification' in window) {
         if (Notification.permission === 'granted') {
           new Notification('My Routine: Test Alert', {
-            body: 'Native notification test successful. Zepp mirroring verified.',
+            body: 'Native notification test successful. Smartwatch mirroring verified.',
             icon: '/favicon.ico',
           });
           return true;
@@ -329,7 +434,7 @@ export class NotificationManager {
           const perm = await Notification.requestPermission();
           if (perm === 'granted') {
             new Notification('My Routine: Test Alert', {
-              body: 'Native notification test successful. Zepp mirroring verified.',
+              body: 'Native notification test successful. Smartwatch mirroring verified.',
               icon: '/favicon.ico',
             });
             return true;

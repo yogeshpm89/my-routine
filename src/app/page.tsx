@@ -17,7 +17,7 @@ import { LogRepository } from '@/lib/repositories/log-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { detectScheduleConflicts } from '@/lib/conflict-detector';
-import { getTodayDateString, addDays, getDayOfWeek } from '@/lib/time-utils';
+import { getTodayDateString, addDays, getDayOfWeek, calculateDuration } from '@/lib/time-utils';
 import { CurrentActivityCard } from '@/components/routine/current-activity-card';
 import { TodayTimeline } from '@/components/routine/today-timeline';
 import { ConflictBanner } from '@/components/routine/conflict-banner';
@@ -32,8 +32,13 @@ import { NotificationManager } from '@/lib/notifications/notification-manager';
 import { NotificationPreferencesRepository } from '@/lib/notifications/preferences-repository';
 import { ActivityEditorDialog } from '@/components/routine/activity-editor-dialog';
 import { RecurrenceEditScopeDialog } from '@/components/routine/recurrence-edit-scope-dialog';
+import { OccurrenceDeleteScopeDialog } from '@/components/routine/occurrence-delete-scope-dialog';
 import { QuickLogModal } from '@/components/routine/quick-log-modal';
 import { MediaPlayerModal } from '@/components/media/media-player-modal';
+import { AiActionConfig } from '@/types/ai';
+import { AiActionRepository } from '@/lib/repositories/ai-action-repository';
+import { AiActionsHub } from '@/components/ai/ai-actions-hub';
+import { AiExecutionDialog } from '@/components/ai/ai-execution-dialog';
 import {
   Clock,
   CalendarDays,
@@ -51,7 +56,6 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
-import { Capacitor } from '@capacitor/core';
 
 export default function RoutineApp() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
@@ -62,7 +66,7 @@ export default function RoutineApp() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
 
   const [selectedDate, setSelectedDate] = useState<string>('2026-10-15');
-  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month' | 'analytics' | 'settings'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month' | 'ai' | 'analytics' | 'settings'>('today');
 
   useEffect(() => {
     setSelectedDate(getTodayDateString('Asia/Kolkata'));
@@ -81,12 +85,20 @@ export default function RoutineApp() {
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [pendingTemplateData, setPendingTemplateData] = useState<RoutineTemplate | null>(null);
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [targetDeleteOccurrence, setTargetDeleteOccurrence] = useState<ActivityOccurrence | null>(null);
+
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [quickLogOccurrence, setQuickLogOccurrence] = useState<ActivityOccurrence | null>(null);
 
   // In-app media player state
   const [activeMediaOccurrence, setActiveMediaOccurrence] = useState<ActivityOccurrence | null>(null);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+
+  // AI execution dialog state
+  const [executingAiAction, setExecutingAiAction] = useState<AiActionConfig | null>(null);
+  const [executingRoutineTitle, setExecutingRoutineTitle] = useState<string>('');
+  const [aiExecutionDialogOpen, setAiExecutionDialogOpen] = useState(false);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
@@ -101,9 +113,9 @@ export default function RoutineApp() {
     setAuthModalOpen(true);
   };
 
-  // Load routine data
+  // Load routine data fallback
   const loadData = useCallback(async () => {
-    if (authLoading || !isAuthenticated || !userId) return;
+    if (authLoading || !userId) return;
     setIsLoading(true);
     try {
       const [tList, oList, lList, gList] = await Promise.all([
@@ -121,20 +133,58 @@ export default function RoutineApp() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedDate, authLoading, isAuthenticated]);
+  }, [userId, selectedDate, authLoading]);
 
+  // Real-time Firestore Subscriptions & Reactive Cache
   useEffect(() => {
-    if (authLoading || !isAuthenticated || !userId) return;
-    loadData();
-    const unsubConflicts = SyncEngine.subscribeConflicts(setSyncConflicts);
-    const unsubRealtime = SyncEngine.startRealtimeListener(userId, () => {
-      loadData();
+    if (authLoading || !userId) return;
+
+    // Immediately load cached data for 0ms initial render
+    setTemplates(RoutineRepository.getLocalTemplates(userId));
+    setOverrides(OverrideRepository.getLocalOverrides(userId));
+    setLogs(LogRepository.getLocalLogs(userId));
+    setGoals(GoalRepository.getLocalGoals(userId));
+    setIsLoading(false);
+
+    if (!isAuthenticated) return;
+
+    // Attach real-time onSnapshot listeners to all 4 Firestore subcollections
+    const unsubTemplates = RoutineRepository.subscribeTemplates(userId, (newTemplates) => {
+      setTemplates(newTemplates);
     });
+
+    const unsubOverrides = OverrideRepository.subscribeOverrides(userId, (newOverrides) => {
+      setOverrides(newOverrides);
+    });
+
+    const unsubLogs = LogRepository.subscribeLogs(userId, (newLogs) => {
+      setLogs(newLogs);
+    });
+
+    const unsubGoals = GoalRepository.subscribeGoals(userId, (newGoals) => {
+      setGoals(newGoals);
+    });
+
+    const unsubConflicts = SyncEngine.subscribeConflicts(setSyncConflicts);
+    const unsubSyncState = SyncEngine.subscribeSync((state) => {
+      if (state === 'synced') {
+        const curTemplates = RoutineRepository.getLocalTemplates(userId);
+        const curOverrides = OverrideRepository.getLocalOverrides(userId);
+        const curLogs = LogRepository.getLocalLogs(userId);
+        const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+        NotificationManager.reconcileNotifications(userId, curTemplates, curOverrides, prefs, curLogs);
+      }
+    });
+
     return () => {
+      unsubTemplates();
+      unsubOverrides();
+      unsubLogs();
+      unsubGoals();
       unsubConflicts();
-      unsubRealtime();
+      unsubSyncState();
     };
-  }, [loadData, userId, authLoading, isAuthenticated]);
+  }, [userId, authLoading, isAuthenticated]);
 
   const handleResolveConflict = async (
     conflictId: string,
@@ -142,18 +192,50 @@ export default function RoutineApp() {
   ) => {
     await SyncEngine.resolveConflict(userId, conflictId, resolution);
     showToast('Sync conflict resolved');
-    loadData();
   };
 
-  // Reconcile native 72-hour notifications upon routine updates
+  const handleSaveGoal = async (goal: GoalTarget) => {
+    await GoalRepository.saveGoal(goal);
+    showToast(`Saved goal target "${goal.title}" to Firebase`);
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    await GoalRepository.deleteGoal(userId, goalId);
+    showToast('Deleted goal target');
+  };
+
+  // Reconcile native 72-hour notifications upon routine updates and logs
   useEffect(() => {
     if (!isAuthenticated || !userId) return;
     NotificationManager.initialize(userId);
     if (templates.length > 0) {
       const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
-      NotificationManager.reconcileNotifications(userId, templates, overrides, prefs);
+      NotificationManager.reconcileNotifications(userId, templates, overrides, prefs, logs);
     }
-  }, [userId, templates, overrides, isAuthenticated]);
+  }, [userId, templates, overrides, logs, isAuthenticated]);
+
+  // Refresh rolling 72-hour notifications when app gains focus or returns from background
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+
+    const handleResumeOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        const curTemplates = RoutineRepository.getLocalTemplates(userId);
+        const curOverrides = OverrideRepository.getLocalOverrides(userId);
+        const curLogs = LogRepository.getLocalLogs(userId);
+        const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+        NotificationManager.reconcileNotifications(userId, curTemplates, curOverrides, prefs, curLogs);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleResumeOrFocus);
+    window.addEventListener('focus', handleResumeOrFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleResumeOrFocus);
+      window.removeEventListener('focus', handleResumeOrFocus);
+    };
+  }, [userId, isAuthenticated]);
 
   // Generate computed occurrences for the day
   const occurrences = generateDailyOccurrences(templates, overrides, logs, selectedDate);
@@ -287,20 +369,92 @@ export default function RoutineApp() {
     loadData();
   };
 
-  const handleDeleteOccurrence = async (occurrence: ActivityOccurrence) => {
-    if (confirm(`Are you sure you want to delete "${occurrence.title}"?`)) {
-      await RoutineRepository.deleteTemplate(userId, occurrence.templateId);
-      showToast(`Deleted "${occurrence.title}"`);
-      loadData();
+  const handleDeleteOccurrence = (occurrence: ActivityOccurrence) => {
+    setTargetDeleteOccurrence(occurrence);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleExecuteAiForOccurrence = async (occ: ActivityOccurrence) => {
+    if (!occ.aiActionId) return;
+    try {
+      const action = await AiActionRepository.getAction(userId, occ.aiActionId);
+      if (action) {
+        setExecutingAiAction(action);
+        setExecutingRoutineTitle(occ.title);
+        setAiExecutionDialogOpen(true);
+      } else {
+        showToast('Associated AI action not found');
+      }
+    } catch (err) {
+      console.error('Failed to load AI action for execution:', err);
+      showToast('Could not load AI action');
     }
   };
 
-  const handleDeleteTemplateFromEditor = async (templateId: string) => {
-    if (confirm('Are you sure you want to delete this routine activity?')) {
-      await RoutineRepository.deleteTemplate(userId, templateId);
+  const handleDeleteTemplateFromEditor = (templateId: string) => {
+    const target =
+      (editingOccurrence && editingOccurrence.templateId === templateId ? editingOccurrence : null) ||
+      occurrences.find((o) => o.templateId === templateId) ||
+      (() => {
+        const tmpl = templates.find((t) => t.id === templateId);
+        if (!tmpl) return null;
+        return {
+          occurrenceId: `occ_${templateId}_${selectedDate}`,
+          templateId,
+          date: selectedDate,
+          startTime: tmpl.startTime,
+          endTime: tmpl.endTime,
+          durationMinutes: calculateDuration(tmpl.startTime, tmpl.endTime),
+          title: tmpl.title,
+          category: tmpl.category,
+          status: 'pending' as const,
+          isFixed: tmpl.isFixed,
+          color: tmpl.color,
+          media: tmpl.media,
+          notes: tmpl.notes,
+          notifications: tmpl.notifications,
+          hasOverride: false,
+          isCancelled: false,
+          isPostponed: false,
+          template: tmpl,
+        };
+      })();
+
+    if (target) {
       setEditorOpen(false);
-      showToast('Deleted routine activity');
-      loadData();
+      setTargetDeleteOccurrence(target);
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  const handleConfirmCancelOccurrence = async (occurrence: ActivityOccurrence) => {
+    try {
+      const override: OccurrenceOverride = {
+        id: `override_${occurrence.templateId}_${occurrence.date}`,
+        userId,
+        templateId: occurrence.templateId,
+        date: occurrence.date,
+        isCancelled: true,
+        isPostponed: false,
+        updatedAt: Date.now(),
+      };
+      await OverrideRepository.saveOverride(override);
+      showToast(`Cancelled "${occurrence.title}" for ${occurrence.date}`);
+      await loadData();
+    } catch (err: unknown) {
+      console.error('Failed to cancel occurrence:', err);
+      throw err;
+    }
+  };
+
+  const handleConfirmArchiveRoutine = async (occurrence: ActivityOccurrence) => {
+    try {
+      await RoutineRepository.archiveTemplate(userId, occurrence.templateId);
+      showToast(`Archived "${occurrence.title}"`);
+      await loadData();
+    } catch (err: unknown) {
+      console.error('Failed to archive routine:', err);
+      throw err;
     }
   };
 
@@ -329,8 +483,12 @@ export default function RoutineApp() {
       <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-md shadow-blue-500/20">
-              <Clock className="w-5 h-5 text-white" />
+            <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden bg-slate-900 border border-white/10 shadow-md shadow-blue-500/10 flex items-center justify-center p-1 shrink-0">
+              <img
+                src="/logo.png"
+                alt="My Routine Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">
@@ -352,6 +510,7 @@ export default function RoutineApp() {
                   { id: 'today', label: 'Day', icon: Clock },
                   { id: 'week', label: 'Week', icon: CalendarDays },
                   { id: 'month', label: 'Month', icon: Calendar },
+                  { id: 'ai', label: 'AI Actions', icon: Sparkles },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
                   { id: 'settings', label: 'Settings & Sync', icon: Settings },
                 ].map((tab) => {
@@ -411,6 +570,14 @@ export default function RoutineApp() {
 
           {/* Hero Content */}
           <div className="relative z-10 max-w-2xl mx-auto flex flex-col items-center space-y-6">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl p-2.5 bg-slate-900/90 border border-white/10 shadow-2xl shadow-blue-500/20 flex items-center justify-center backdrop-blur-md">
+              <img
+                src="/logo.png"
+                alt="My Routine Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Firebase Cloud-Synced Routine Engine</span>
@@ -543,6 +710,7 @@ export default function RoutineApp() {
                   setActiveMediaOccurrence(occ);
                   setActiveMediaIndex(idx);
                 }}
+                onExecuteAi={handleExecuteAiForOccurrence}
               />
 
               {/* Conflict & Goal Advisory Banner */}
@@ -565,6 +733,7 @@ export default function RoutineApp() {
                   setActiveMediaOccurrence(occ);
                   setActiveMediaIndex(idx);
                 }}
+                onExecuteAi={handleExecuteAiForOccurrence}
               />
             </>
           )}
@@ -594,13 +763,20 @@ export default function RoutineApp() {
             />
           )}
 
+          {activeTab === 'ai' && (
+            <AiActionsHub userId={userId} />
+          )}
+
           {activeTab === 'analytics' && (
             <AnalyticsTab
+              userId={userId}
               selectedDate={selectedDate}
               templates={templates}
               overrides={overrides}
               logs={logs}
               goals={goals}
+              onSaveGoal={handleSaveGoal}
+              onDeleteGoal={handleDeleteGoal}
             />
           )}
 
@@ -647,6 +823,17 @@ export default function RoutineApp() {
             }}
           />
 
+          <OccurrenceDeleteScopeDialog
+            isOpen={deleteDialogOpen}
+            occurrence={targetDeleteOccurrence}
+            onCancelOccurrence={handleConfirmCancelOccurrence}
+            onArchiveRoutine={handleConfirmArchiveRoutine}
+            onClose={() => {
+              setDeleteDialogOpen(false);
+              setTargetDeleteOccurrence(null);
+            }}
+          />
+
           <QuickLogModal
             isOpen={quickLogOpen}
             occurrence={quickLogOccurrence}
@@ -661,6 +848,18 @@ export default function RoutineApp() {
             occurrence={activeMediaOccurrence}
             initialMediaIndex={activeMediaIndex}
             onClose={() => setActiveMediaOccurrence(null)}
+          />
+
+          <AiExecutionDialog
+            isOpen={aiExecutionDialogOpen}
+            action={executingAiAction}
+            routineTitle={executingRoutineTitle}
+            selectedDate={selectedDate}
+            userId={userId}
+            onClose={() => {
+              setAiExecutionDialogOpen(false);
+              setExecutingAiAction(null);
+            }}
           />
         </>
       )}

@@ -33,8 +33,11 @@ import {
   Play,
   Link2,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
+import { AiActionConfig } from '@/types/ai';
+import { AiActionRepository } from '@/lib/repositories/ai-action-repository';
 
 interface ActivityEditorDialogProps {
   isOpen: boolean;
@@ -90,6 +93,8 @@ export function ActivityEditorDialog({
   const [media, setMedia] = useState<MediaAttachment[]>([]);
   const [notes, setNotes] = useState('');
   const [color, setColor] = useState('#3b82f6');
+  const [aiActionId, setAiActionId] = useState('');
+  const [availableAiActions, setAvailableAiActions] = useState<AiActionConfig[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Media link & upload states
@@ -103,6 +108,8 @@ export function ActivityEditorDialog({
   const [previewIndex, setPreviewIndex] = useState(0);
 
   useEffect(() => {
+    setAvailableAiActions(AiActionRepository.getLocalActions(userId));
+
     if (initialOccurrence) {
       setTitle(initialOccurrence.title);
       setCategory(initialOccurrence.category);
@@ -113,6 +120,7 @@ export function ActivityEditorDialog({
       setDaysOfWeek(initialOccurrence.template.recurrence.daysOfWeek || [1, 2, 3, 4, 5]);
       setNotifications(initialOccurrence.notifications || []);
       setMedia(initialOccurrence.media || initialOccurrence.template.media || []);
+      setAiActionId(initialOccurrence.aiActionId || initialOccurrence.template.aiActionId || '');
       setNotes(initialOccurrence.notes || '');
       setColor(initialOccurrence.color || '#3b82f6');
     } else {
@@ -125,13 +133,14 @@ export function ActivityEditorDialog({
       setDaysOfWeek([1, 2, 3, 4, 5]);
       setNotifications([{ id: `notif_${Date.now()}`, type: 'start', offsetMinutes: 0, enabled: true }]);
       setMedia([]);
+      setAiActionId('');
       setNotes('');
       setColor('#3b82f6');
     }
     setUrlInput('');
     setUrlTitleInput('');
     setError(null);
-  }, [initialOccurrence, isOpen]);
+  }, [initialOccurrence, isOpen, userId]);
 
   if (!isOpen) return null;
 
@@ -302,10 +311,12 @@ export function ActivityEditorDialog({
       },
       notifications,
       media,
+      aiActionId: aiActionId || undefined,
       notes: notes.trim(),
       color,
       timezone: 'Asia/Kolkata',
-      isArchived: false,
+      isArchived: initialOccurrence?.template.isArchived ?? false,
+      archivedAt: initialOccurrence?.template.archivedAt ?? null,
       createdAt: initialOccurrence?.template.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
@@ -711,6 +722,32 @@ export function ActivityEditorDialog({
                 rows={2}
                 className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
+            </div>
+
+            {/* Attached AI Routine Action */}
+            <div className="p-4 rounded-xl bg-slate-800/40 border border-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" /> Attached AI Routine Action
+                </label>
+                <span className="text-[10px] text-slate-400">On-demand execution</span>
+              </div>
+
+              <select
+                value={aiActionId}
+                onChange={(e) => setAiActionId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-white/10 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition cursor-pointer"
+              >
+                <option value="">None (Standard Routine)</option>
+                {availableAiActions.map((act) => (
+                  <option key={act.id} value={act.id}>
+                    {act.name} ({act.outputFormat})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-400">
+                When attached, an <strong>Execute AI</strong> trigger appears on the routine card to run briefings, reflections, or summaries.
+              </p>
             </div>
 
             {/* Action Buttons */}

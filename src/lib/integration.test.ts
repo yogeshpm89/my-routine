@@ -9,6 +9,12 @@ import { AnalyticsCalculator } from '@/lib/analytics/analytics-calculator';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import { BackupService } from '@/lib/sync/backup-service';
 import { getDayOfWeek } from '@/lib/time-utils';
+import {
+  RoutineTemplate,
+  OccurrenceOverride,
+  ActivityLog,
+  GoalTarget,
+} from '@/types/routine';
 
 describe('My Routine Full System Integration', () => {
   const testUserId = 'integration-test-user';
@@ -160,5 +166,43 @@ describe('My Routine Full System Integration', () => {
 
     const restoredTemplates = RoutineRepository.getLocalTemplates(testUserId);
     expect(restoredTemplates.length).toBe(backupPackage.templates.length);
+  });
+
+  it('subscribes to real-time routine templates and receives initial data immediately', () => {
+    let received: RoutineTemplate[] = [];
+    const unsub = RoutineRepository.subscribeTemplates(testUserId, (data) => {
+      received = data;
+    });
+    expect(received.length).toBeGreaterThanOrEqual(20);
+    expect(typeof unsub).toBe('function');
+    unsub();
+  });
+
+  it('subscribes to real-time overrides and logs with immediate callbacks', () => {
+    let receivedOverrides: OccurrenceOverride[] = [];
+    const unsubOverrides = OverrideRepository.subscribeOverrides(testUserId, (data) => {
+      receivedOverrides = data;
+    });
+    expect(Array.isArray(receivedOverrides)).toBe(true);
+    expect(typeof unsubOverrides).toBe('function');
+    unsubOverrides();
+
+    let receivedLogs: ActivityLog[] = [];
+    const unsubLogs = LogRepository.subscribeLogs(testUserId, (data) => {
+      receivedLogs = data;
+    });
+    expect(Array.isArray(receivedLogs)).toBe(true);
+    expect(typeof unsubLogs).toBe('function');
+    unsubLogs();
+  });
+
+  it('subscribes to real-time goals and receives seeded targets', () => {
+    let receivedGoals: GoalTarget[] = [];
+    const unsubGoals = GoalRepository.subscribeGoals(testUserId, (data) => {
+      receivedGoals = data;
+    });
+    expect(receivedGoals.length).toBeGreaterThanOrEqual(5);
+    expect(typeof unsubGoals).toBe('function');
+    unsubGoals();
   });
 });

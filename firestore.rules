@@ -44,6 +44,21 @@ service cloud.firestore {
       match /registry/{registryId} {
         allow read, write: if isOwner(userId);
       }
+
+      // AI routine action configurations
+      match /ai_actions/{actionId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // AI executions history
+      match /ai_executions/{executionId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // AI execution formatted results
+      match /ai_results/{resultId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Deny all other access by default

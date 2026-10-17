@@ -32,6 +32,7 @@ interface CurrentActivityCardProps {
   ) => void;
   onOpenEditor: (occurrence: ActivityOccurrence) => void;
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
+  onExecuteAi?: (occurrence: ActivityOccurrence) => void;
 }
 
 export function CurrentActivityCard({
@@ -39,6 +40,7 @@ export function CurrentActivityCard({
   onUpdateStatus,
   onOpenEditor,
   onPlayMedia,
+  onExecuteAi,
 }: CurrentActivityCardProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
 
@@ -208,10 +210,20 @@ export function CurrentActivityCard({
                   <button
                     id="btn-skip-current"
                     onClick={() => onUpdateStatus(currentOccurrence, 'skipped')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer"
                   >
                     <FastForward className="w-3.5 h-3.5" /> Skip
                   </button>
+                  {currentOccurrence.aiActionId && (
+                    <button
+                      id="btn-execute-ai-current"
+                      onClick={() => onExecuteAi?.(currentOccurrence)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-purple-600/90 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/25 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                      title="Execute attached AI Routine Action"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> Execute AI
+                    </button>
+                  )}
                 </>
               ) : (
                 <div className="flex items-center gap-2">

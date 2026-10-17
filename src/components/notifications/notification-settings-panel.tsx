@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   NotificationManager,
-  NOTIFICATION_CHANNEL_ID,
 } from '@/lib/notifications/notification-manager';
 import {
   NotificationPreferencesRepository,
@@ -12,7 +11,11 @@ import {
 import {
   NotificationPreferences,
   ScheduledNotificationItem,
+  NotificationDiagnostics,
 } from '@/types/notifications';
+import { RoutineRepository } from '@/lib/repositories/routine-repository';
+import { OverrideRepository } from '@/lib/repositories/override-repository';
+import { LogRepository } from '@/lib/repositories/log-repository';
 import {
   Bell,
   BellRing,
@@ -22,9 +25,8 @@ import {
   Clock,
   Watch,
   CheckCircle2,
-  ShieldCheck,
   AlertCircle,
-  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 
 interface NotificationSettingsPanelProps {
@@ -36,18 +38,26 @@ export function NotificationSettingsPanel({ userId }: NotificationSettingsPanelP
     getDefaultPreferences(userId)
   );
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [registryItems, setRegistryItems] = useState<ScheduledNotificationItem[]>([]);
-  const [testSent, setTestSent] = useState(false);
+  const [registryItems, setRegistryItems] = useState<ScheduledNotificationItem[]>(() =>
+    typeof window !== 'undefined' ? NotificationManager.getLocalRegistry(userId) : []
+  );
+  const [diagnostics, setDiagnostics] = useState<NotificationDiagnostics | null>(() =>
+    typeof window !== 'undefined' ? NotificationManager.getDiagnostics(userId) : null
+  );
+  const [isReconciling, setIsReconciling] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load preferences & registry
-    NotificationPreferencesRepository.getPreferences(userId).then(setPrefs);
-    const registry = NotificationManager.getLocalRegistry(userId);
-    setRegistryItems(registry);
-
-    // Check permission
-    NotificationManager.checkPermissions().then(setPermissionGranted);
+    let isMounted = true;
+    NotificationPreferencesRepository.getPreferences(userId).then((p) => {
+      if (isMounted) setPrefs(p);
+    });
+    NotificationManager.checkPermissions().then((granted) => {
+      if (isMounted) setPermissionGranted(granted);
+    });
+    return () => {
+      isMounted = false;
+    };
   }, [userId]);
 
   const handleToggleQuietHours = () => {
@@ -95,16 +105,34 @@ export function NotificationSettingsPanel({ userId }: NotificationSettingsPanelP
 
   const handleSendTestNotification = async () => {
     const sent = await NotificationManager.sendTestNotification();
-    setTestSent(true);
     if (sent) {
       setSaveMessage('Test alert sent! Check your phone notification shade and Amazfit watch.');
     } else {
       setSaveMessage('Could not dispatch notification. Please grant permission.');
     }
     setTimeout(() => {
-      setTestSent(false);
-      setSaveMessage(null), 5000;
-    });
+      setSaveMessage(null);
+    }, 5000);
+  };
+
+  const handleRefreshScheduleNow = async () => {
+    setIsReconciling(true);
+    try {
+      const templates = RoutineRepository.getLocalTemplates(userId);
+      const overrides = OverrideRepository.getLocalOverrides(userId);
+      const logs = LogRepository.getLocalLogs(userId);
+      const res = await NotificationManager.reconcileNotifications(userId, templates, overrides, prefs, logs);
+      const updatedRegistry = NotificationManager.getLocalRegistry(userId);
+      setRegistryItems(updatedRegistry);
+      const updatedDiag = NotificationManager.getDiagnostics(userId);
+      setDiagnostics(updatedDiag);
+      setSaveMessage(`Schedule reconciled. ${res.scheduled} alarms queued for next 72 hours.`);
+    } catch {
+      setSaveMessage('Failed to refresh notification schedule.');
+    } finally {
+      setIsReconciling(false);
+      setTimeout(() => setSaveMessage(null), 4000);
+    }
   };
 
   return (
@@ -139,20 +167,85 @@ export function NotificationSettingsPanel({ userId }: NotificationSettingsPanelP
             ) : (
               <button
                 onClick={handleRequestPermission}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-md transition"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-md transition cursor-pointer"
               >
                 <AlertCircle className="w-3.5 h-3.5" /> Enable Notifications
               </button>
             )}
 
             <button
+              onClick={handleRefreshScheduleNow}
+              disabled={isReconciling}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 shadow-md transition cursor-pointer disabled:opacity-50"
+              title="Re-evaluate 72-hour rolling schedule immediately"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+              <span>Refresh Schedule</span>
+            </button>
+
+            <button
               onClick={handleSendTestNotification}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md transition"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md transition cursor-pointer"
             >
               <Bell className="w-3.5 h-3.5" /> Test Alert
             </button>
           </div>
         </div>
+
+        {/* Live Diagnostics Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+          <div className="p-2.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-0.5">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">Active Alarms</span>
+            <div className="text-sm font-bold text-white">
+              {diagnostics?.scheduledCount || registryItems.length} scheduled
+            </div>
+            <span className="text-[10px] text-slate-500 block">Rolling 72h window</span>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-0.5">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">Last Sync</span>
+            <div className="text-sm font-bold text-slate-200">
+              {diagnostics?.lastReconciliationTime
+                ? new Date(diagnostics.lastReconciliationTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'Pending'}
+            </div>
+            <span className="text-[10px] text-slate-500 block">AlarmManager sync</span>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-0.5">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">Next Reminder</span>
+            <div className="text-sm font-bold text-blue-400 truncate">
+              {diagnostics?.nextScheduledTime
+                ? new Date(diagnostics.nextScheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'None pending'}
+            </div>
+            <span className="text-[10px] text-slate-500 block truncate">
+              {diagnostics?.nextScheduledTitle || 'All caught up'}
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-0.5">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">Exact Alarms</span>
+            <div className={`text-sm font-bold ${permissionGranted ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {permissionGranted ? 'Supported' : 'Restricted'}
+            </div>
+            <span className="text-[10px] text-slate-500 block">
+              {permissionGranted ? 'Android AlarmManager' : 'Grant special access'}
+            </span>
+          </div>
+        </div>
+
+        {!permissionGranted && (
+          <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+            <div className="space-y-0.5">
+              <strong className="font-semibold block text-white">Reminders May Be Delayed or Suppressed</strong>
+              <p className="text-[11px] leading-relaxed text-amber-200/90">
+                Android 13+ requires notification permissions, and Android 12+ requires exact alarm access. Without these, reminders will not trigger at exact routine times or mirror to your Amazfit smartwatch.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Quiet Hours & Haptics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

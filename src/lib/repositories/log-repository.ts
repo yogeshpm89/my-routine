@@ -8,6 +8,7 @@ import {
   setDoc,
   query,
   where,
+  onSnapshot,
 } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'my_routine_logs_';
@@ -43,6 +44,41 @@ export class LogRepository {
   static saveLocalLogs(userId: string, logs: ActivityLog[]): void {
     if (typeof window === 'undefined') return;
     localStorage.setItem(this.getLocalKey(userId), JSON.stringify(logs));
+  }
+
+  static subscribeLogs(
+    userId: string,
+    onData: (logs: ActivityLog[]) => void,
+    onError?: (error: any) => void
+  ): () => void {
+    const local = this.getLocalLogs(userId);
+    onData(local);
+
+    if (!canSyncWithFirestore(userId)) {
+      return () => {};
+    }
+
+    try {
+      const colRef = collection(db, `users/${userId}/logs`);
+      const unsubscribe = onSnapshot(
+        colRef,
+        (snapshot) => {
+          const remote: ActivityLog[] = [];
+          snapshot.forEach((d) => remote.push(d.data() as ActivityLog));
+          this.saveLocalLogs(userId, remote);
+          onData(remote);
+        },
+        (err) => {
+          console.warn('Realtime log listener error:', err);
+          if (onError) onError(err);
+        }
+      );
+      return unsubscribe;
+    } catch (err) {
+      console.warn('Failed to attach realtime log listener:', err);
+      if (onError) onError(err);
+      return () => {};
+    }
   }
 
   static async getLogsForDate(userId: string, date: string): Promise<ActivityLog[]> {
