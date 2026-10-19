@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:web": "node scripts/build-web.js",
     "build:mobile": "node scripts/build-mobile.js",
+    "deploy:hosting": "node scripts/build-web.js && npx -y firebase-tools@latest deploy --only hosting",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
