@@ -1,13 +1,16 @@
-name: Build Android APK
+name: Build & Deploy Android APK to Firebase
 
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build-apk:
-    name: Build Android APK
+  build-and-deploy:
+    name: Build APK & Deploy to Firebase Hosting
     runs-on: ubuntu-latest
 
     steps:
@@ -50,14 +53,60 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x android/gradlew
 
-      - name: Build Android Debug APK
+      - name: Build Android Release APK
         working-directory: ./android
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          ./gradlew assembleRelease assembleDebug --stacktrace
 
-      - name: Upload Debug APK Artifact
+      - name: Stage APK for Firebase Hosting In-App Updates
+        run: |
+          mkdir -p out/download
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk out/download/my-routine-release.apk
+            echo "Staged app-release.apk -> out/download/my-routine-release.apk"
+          elif [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk out/download/my-routine-release.apk
+            echo "Staged app-debug.apk -> out/download/my-routine-release.apk"
+          fi
+
+          # Update exact file size in out/version.json for accurate in-app modal display
+          if [ -f out/download/my-routine-release.apk ]; then
+            APK_SIZE=$(stat -c%s out/download/my-routine-release.apk 2>/dev/null || stat -f%z out/download/my-routine-release.apk || echo 0)
+            echo "Generated APK size: $APK_SIZE bytes"
+            node -e "
+              const fs = require('fs');
+              if (fs.existsSync('out/version.json')) {
+                const v = JSON.parse(fs.readFileSync('out/version.json', 'utf8'));
+                if ($APK_SIZE > 0) v.fileSizeBytes = $APK_SIZE;
+                fs.writeFileSync('out/version.json', JSON.stringify(v, null, 2));
+                console.log('Updated out/version.json with exact file size.');
+              }
+            "
+          fi
+
+      - name: Upload APK to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: my-routine-android-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: my-routine-android-apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
           retention-days: 14
+
+      - name: Deploy APK & Web App to Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MY_ROUTINE_APP_3F631 || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "Deploying via Firebase Service Account..."
+            echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+            export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json"
+            npx -y firebase-tools@latest deploy --only hosting --project my-routine-app-3f631
+          elif [ -n "$FIREBASE_TOKEN" ]; then
+            echo "Deploying via FIREBASE_TOKEN..."
+            npx -y firebase-tools@latest deploy --only hosting --project my-routine-app-3f631 --token "$FIREBASE_TOKEN"
+          else
+            echo "::warning title=Firebase Secret Not Configured::Neither FIREBASE_SERVICE_ACCOUNT_MY_ROUTINE_APP_3F631 nor FIREBASE_TOKEN was found in GitHub Secrets. The APK build succeeded and is available in GitHub Artifacts. To enable automatic hosting upload, add either secret in GitHub Repo Settings -> Secrets and variables -> Actions."
+          fi
