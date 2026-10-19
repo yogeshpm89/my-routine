@@ -8,6 +8,7 @@ import {
   NotificationRule,
   ActivityOccurrence,
   MediaAttachment,
+  TaskStep,
 } from '@/types/routine';
 import { calculateDuration, formatDuration } from '@/lib/time-utils';
 import { CATEGORY_CONFIG } from './activity-badge';
@@ -34,6 +35,10 @@ import {
   Link2,
   Loader2,
   Sparkles,
+  ListChecks,
+  ArrowUp,
+  ArrowDown,
+  Check,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { AiActionConfig } from '@/types/ai';
@@ -52,6 +57,7 @@ interface ActivityEditorDialogProps {
       modifiedTitle: string;
       notes: string;
       modifiedMedia?: MediaAttachment[];
+      modifiedSteps?: TaskStep[];
     };
   }) => void;
   onDelete?: (templateId: string) => void;
@@ -91,6 +97,8 @@ export function ActivityEditorDialog({
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]);
   const [notifications, setNotifications] = useState<NotificationRule[]>([]);
   const [media, setMedia] = useState<MediaAttachment[]>([]);
+  const [steps, setSteps] = useState<TaskStep[]>([]);
+  const [newStepText, setNewStepText] = useState('');
   const [notes, setNotes] = useState('');
   const [color, setColor] = useState('#3b82f6');
   const [aiActionId, setAiActionId] = useState('');
@@ -120,6 +128,7 @@ export function ActivityEditorDialog({
       setDaysOfWeek(initialOccurrence.template.recurrence.daysOfWeek || [1, 2, 3, 4, 5]);
       setNotifications(initialOccurrence.notifications || []);
       setMedia(initialOccurrence.media || initialOccurrence.template.media || []);
+      setSteps(initialOccurrence.steps || initialOccurrence.template.steps || []);
       setAiActionId(initialOccurrence.aiActionId || initialOccurrence.template.aiActionId || '');
       setNotes(initialOccurrence.notes || '');
       setColor(initialOccurrence.color || '#3b82f6');
@@ -133,12 +142,14 @@ export function ActivityEditorDialog({
       setDaysOfWeek([1, 2, 3, 4, 5]);
       setNotifications([{ id: `notif_${Date.now()}`, type: 'start', offsetMinutes: 0, enabled: true }]);
       setMedia([]);
+      setSteps([]);
       setAiActionId('');
       setNotes('');
       setColor('#3b82f6');
     }
     setUrlInput('');
     setUrlTitleInput('');
+    setNewStepText('');
     setError(null);
   }, [initialOccurrence, isOpen, userId]);
 
@@ -232,6 +243,33 @@ export function ActivityEditorDialog({
     setMedia((prev) => prev.filter((m) => m.id !== item.id));
   };
 
+  const handleAddStep = (customText?: string) => {
+    const stepText = (customText ?? newStepText).trim();
+    if (!stepText) return;
+    const newStep: TaskStep = {
+      id: `step_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      text: stepText,
+      isCompleted: false,
+    };
+    setSteps((prev) => [...prev, newStep]);
+    if (!customText) setNewStepText('');
+  };
+
+  const handleRemoveStep = (stepId: string) => {
+    setSteps((prev) => prev.filter((s) => s.id !== stepId));
+  };
+
+  const handleMoveStep = (index: number, direction: 'up' | 'down') => {
+    setSteps((prev) => {
+      const targetIdx = direction === 'up' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const [moved] = copy.splice(index, 1);
+      copy.splice(targetIdx, 0, moved);
+      return copy;
+    });
+  };
+
   const handlePreviewMedia = (index: number) => {
     // Construct preview occurrence
     const dummyTemplate: RoutineTemplate = {
@@ -250,6 +288,7 @@ export function ActivityEditorDialog({
       },
       notifications,
       media,
+      steps,
       notes: notes.trim(),
       color,
       timezone: 'Asia/Kolkata',
@@ -272,6 +311,8 @@ export function ActivityEditorDialog({
       color: dummyTemplate.color,
       notifications: dummyTemplate.notifications,
       media,
+      steps,
+      completedStepIds: [],
       hasOverride: false,
       isCancelled: false,
       isPostponed: false,
@@ -311,6 +352,7 @@ export function ActivityEditorDialog({
       },
       notifications,
       media,
+      steps,
       aiActionId: aiActionId || undefined,
       notes: notes.trim(),
       color,
@@ -329,6 +371,7 @@ export function ActivityEditorDialog({
         modifiedTitle: title.trim(),
         notes: notes.trim(),
         modifiedMedia: media,
+        modifiedSteps: steps,
       },
     });
   };
@@ -720,10 +763,117 @@ export function ActivityEditorDialog({
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Instructions, context, checklists, or details..."
+                placeholder="Instructions, context, or details..."
                 rows={2}
                 className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
+            </div>
+
+            {/* Task Steps & Checklist */}
+            <div className="p-4 rounded-xl bg-slate-800/40 border border-white/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                  <ListChecks className="w-3.5 h-3.5 text-blue-400" /> Steps & Checklist ({steps.length})
+                </label>
+                <span className="text-[10px] text-slate-400">Followable action steps</span>
+              </div>
+
+              {/* Add Step Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newStepText}
+                  onChange={(e) => setNewStepText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddStep();
+                    }
+                  }}
+                  placeholder="Add step (e.g., 5m warm-up, write report)..."
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-800/80 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAddStep()}
+                  disabled={!newStepText.trim()}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add
+                </button>
+              </div>
+
+              {/* Quick Template Suggestions */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-slate-500">Quick add:</span>
+                {(category === 'fitness'
+                  ? ['Warm-up', 'Primary set', 'Cooldown & stretch', 'Hydrate']
+                  : category === 'work' || category === 'business'
+                  ? ['Review priorities', 'Deep focus block', 'Send updates', 'Wrap-up']
+                  : category === 'mindfulness' || category === 'health'
+                  ? ['Deep breathing', 'Stretching', 'Reflect & journal', 'Take vitamins']
+                  : ['Step 1: Prepare', 'Step 2: Execute', 'Step 3: Review']
+                ).map((sugg) => (
+                  <button
+                    key={sugg}
+                    type="button"
+                    onClick={() => handleAddStep(sugg)}
+                    className="text-[10px] text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-lg border border-white/5 transition cursor-pointer"
+                  >
+                    + {sugg}
+                  </button>
+                ))}
+              </div>
+
+              {/* Step List */}
+              {steps.length > 0 ? (
+                <div className="space-y-1.5 pt-1">
+                  {steps.map((st, idx) => (
+                    <div
+                      key={st.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-800/60 border border-white/5 text-xs text-slate-200"
+                    >
+                      <div className="flex items-center gap-2 grow min-w-0">
+                        <span className="w-5 h-5 rounded-md bg-slate-700/80 text-slate-300 font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span className="truncate">{st.text}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStep(idx, 'up')}
+                          disabled={idx === 0}
+                          className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-20 transition"
+                          title="Move up"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStep(idx, 'down')}
+                          disabled={idx === steps.length - 1}
+                          className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-20 transition"
+                          title="Move down"
+                        >
+                          <ArrowDown className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStep(st.id)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-400 transition"
+                          title="Remove step"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 italic">No checklist steps added yet.</p>
+              )}
             </div>
 
             {/* Attached AI Routine Action */}

@@ -1,4 +1,4 @@
-import { db, isFirebaseConfigured, canSyncWithFirestore } from '@/lib/firebase/config';
+import { db, isFirebaseConfigured, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
 import { MutationQueue, SyncMutation } from './mutation-queue';
 import { RoutineRepository } from '@/lib/repositories/routine-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
@@ -61,7 +61,7 @@ export class SyncEngine {
     return 'synced';
   }
 
-  private static notifyListeners(userId: string): void {
+  static notifyListeners(userId: string): void {
     const state = this.getCurrentState();
     const count = MutationQueue.getPendingCount(userId);
     this.syncListeners.forEach((l) => l(state, count));
@@ -114,8 +114,9 @@ export class SyncEngine {
             }
           }
 
-          // Safe to apply
-          await setDoc(docRef, mutation.payload);
+          // Safe to apply (clean payload to prevent unsupported undefined values)
+          const cleaned = cleanForFirestore(mutation.payload);
+          await setDoc(docRef, cleaned);
           MutationQueue.dequeue(userId, mutation.id);
           appliedCount++;
         }
@@ -155,11 +156,11 @@ export class SyncEngine {
       const goals = GoalRepository.getLocalGoals(userId);
 
       for (const t of templates) {
-        await setDoc(doc(db, `users/${userId}/templates`, t.id), t);
+        await setDoc(doc(db, `users/${userId}/templates`, t.id), cleanForFirestore(t));
       }
 
       for (const g of goals) {
-        await setDoc(doc(db, `users/${userId}/goals`, g.id), g);
+        await setDoc(doc(db, `users/${userId}/goals`, g.id), cleanForFirestore(g));
       }
 
       return {
@@ -191,7 +192,7 @@ export class SyncEngine {
       // Force overwrite remote with local payload
       if (canSyncWithFirestore(userId)) {
         const docRef = doc(db, `users/${userId}/${conflict.mutation.collection}`, conflict.mutation.docId);
-        await setDoc(docRef, { ...conflict.localData, updatedAt: Date.now() });
+        await setDoc(docRef, cleanForFirestore({ ...conflict.localData, updatedAt: Date.now() }));
       }
       MutationQueue.dequeue(userId, conflict.mutation.id);
     } else {

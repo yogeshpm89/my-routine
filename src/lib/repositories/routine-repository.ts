@@ -1,7 +1,8 @@
 import { RoutineTemplate } from '@/types/routine';
 import { getInitialRoutineTemplates } from '@/lib/seed-data';
-import { db, canSyncWithFirestore } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
+import { SyncEngine } from '@/lib/sync/sync-engine';
 import {
   collection,
   doc,
@@ -157,7 +158,7 @@ export class RoutineRepository {
             onData(merged);
           } else if (local.length > 0) {
             for (const t of local) {
-              setDoc(doc(db, `users/${userId}/templates`, t.id), t).catch(console.warn);
+              setDoc(doc(db, `users/${userId}/templates`, t.id), cleanForFirestore(t)).catch(console.warn);
             }
           } else {
             this.saveLocalTemplates(userId, []);
@@ -229,11 +230,12 @@ export class RoutineRepository {
 
     if (canSyncWithFirestore(template.userId)) {
       try {
-        await setDoc(doc(db, `users/${template.userId}/templates`, template.id), templateToSave);
+        await setDoc(doc(db, `users/${template.userId}/templates`, template.id), cleanForFirestore(templateToSave));
         // Clear from queue if direct write succeeded
         const q = MutationQueue.getQueue(template.userId);
         const m = q.find((item) => item.collection === 'templates' && item.docId === template.id);
         if (m) MutationQueue.dequeue(template.userId, m.id);
+        SyncEngine.notifyListeners(template.userId);
       } catch (err) {
         console.warn('Failed to persist template to Firestore, queued locally:', err);
       }
@@ -254,6 +256,7 @@ export class RoutineRepository {
         const q = MutationQueue.getQueue(userId);
         const m = q.find((item) => item.collection === 'templates' && item.docId === templateId);
         if (m) MutationQueue.dequeue(userId, m.id);
+        SyncEngine.notifyListeners(userId);
       } catch (err) {
         console.warn('Failed to delete template from Firestore, queued locally:', err);
       }

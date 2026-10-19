@@ -57,13 +57,14 @@ import {
   Menu,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
+import { canSyncWithFirestore } from '@/lib/firebase/config';
 import { MobileDrawer } from '@/components/navigation/mobile-drawer';
 
 export default function RoutineApp() {
   const { user, isDemoMode, loading: authLoading, signInWithGoogle, continueAsGuest, signOut } = useAuth();
-  const isAuthenticated = Boolean(user);
-  const isCloudSynced = Boolean(user && !user.isAnonymous);
   const userId = user?.uid || '';
+  const isAuthenticated = Boolean(user);
+  const isCloudSynced = Boolean(user && canSyncWithFirestore(userId));
 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
@@ -271,7 +272,40 @@ export default function RoutineApp() {
       return [...prev, updated];
     });
 
-    showToast(`Marked "${occurrence.title}" as ${status.replace('_', ' ')}`);
+    const statusAction =
+      status === 'in_progress'
+        ? 'Started'
+        : status === 'skipped'
+        ? 'Skipped'
+        : status === 'completed'
+        ? 'Completed'
+        : status === 'pending'
+        ? 'Reset to pending'
+        : `Marked as ${status.replace('_', ' ')}`;
+    showToast(`${statusAction}: "${occurrence.title}"`);
+  };
+
+  // Step Checklist Toggle Handler
+  const handleToggleStep = async (occurrence: ActivityOccurrence, stepId: string) => {
+    const updated = await LogRepository.toggleStep(
+      userId,
+      selectedDate,
+      occurrence.templateId,
+      stepId
+    );
+
+    setLogs((prev) => {
+      const idx = prev.findIndex((l) => l.id === updated.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updated;
+        return copy;
+      }
+      return [...prev, updated];
+    });
+
+    const isDone = updated.completedStepIds?.includes(stepId);
+    showToast(isDone ? 'Step completed ✓' : 'Step unchecked');
   };
 
   // Activity Editor Handlers
@@ -331,6 +365,7 @@ export default function RoutineApp() {
         modifiedTitle: pendingTemplateData.title,
         notes: pendingTemplateData.notes,
         modifiedMedia: pendingTemplateData.media,
+        modifiedSteps: pendingTemplateData.steps,
         isCancelled: false,
         isPostponed: false,
         updatedAt: Date.now(),
@@ -416,6 +451,8 @@ export default function RoutineApp() {
           isFixed: tmpl.isFixed,
           color: tmpl.color,
           media: tmpl.media,
+          steps: tmpl.steps || [],
+          completedStepIds: [],
           notes: tmpl.notes,
           notifications: tmpl.notifications,
           hasOverride: false,
@@ -540,19 +577,21 @@ export default function RoutineApp() {
               <div className="flex items-center gap-1.5 sm:gap-2.5">
                 {isCloudSynced ? (
                   <div
-                    title="Connected to Cloud Firestore"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-slate-900 border border-emerald-500/30"
+                    title="Real-time Cloud Firestore Active"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-slate-900 border border-emerald-500/30 shadow-sm shadow-emerald-500/10"
                   >
-                    <Wifi className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-400 text-[11px] hidden sm:inline">Cloud Synced</span>
+                    <Wifi className="w-3 h-3 text-emerald-400 animate-pulse" />
+                    <span className="text-emerald-400 text-[11px] hidden sm:inline">
+                      {user?.isAnonymous ? 'Cloud Guest' : 'Cloud Synced'}
+                    </span>
                   </div>
                 ) : (
                   <div
-                    title="Local Guest Storage"
+                    title="Local Storage Mode"
                     className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-slate-900 border border-amber-500/30"
                   >
                     <WifiOff className="w-3 h-3 text-amber-400" />
-                    <span className="text-amber-400 text-[11px] hidden sm:inline">Guest</span>
+                    <span className="text-amber-400 text-[11px] hidden sm:inline">Local Only</span>
                   </div>
                 )}
 
@@ -748,6 +787,7 @@ export default function RoutineApp() {
                   setActiveMediaIndex(idx);
                 }}
                 onExecuteAi={handleExecuteAiForOccurrence}
+                onToggleStep={handleToggleStep}
               />
 
               {/* Conflict & Goal Advisory Banner */}
@@ -771,6 +811,7 @@ export default function RoutineApp() {
                   setActiveMediaIndex(idx);
                 }}
                 onExecuteAi={handleExecuteAiForOccurrence}
+                onToggleStep={handleToggleStep}
               />
             </>
           )}

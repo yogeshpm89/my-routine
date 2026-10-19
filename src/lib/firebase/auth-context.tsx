@@ -48,22 +48,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
   useEffect(() => {
-    // Check if user previously chosen local guest/demo mode
-    const storedGuest = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_GUEST_KEY) : null;
-    if (storedGuest) {
-      try {
-        const guestData = JSON.parse(storedGuest);
-        setUser(guestData);
-        setIsDemoMode(true);
-        setLoading(false);
-        return;
-      } catch {
-        localStorage.removeItem(LOCAL_GUEST_KEY);
-      }
-    }
-
     if (!isFirebaseConfigured || !auth || typeof (auth as any).onAuthStateChanged !== 'function') {
-      // Automatic fallback to local guest profile so the app works immediately out of the box
+      // Automatic fallback to local guest profile so the app works offline/without Firebase
+      const storedGuest = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_GUEST_KEY) : null;
+      if (storedGuest) {
+        try {
+          const guestData = JSON.parse(storedGuest);
+          setUser(guestData);
+          setIsDemoMode(true);
+          setLoading(false);
+          return;
+        } catch {
+          localStorage.removeItem(LOCAL_GUEST_KEY);
+        }
+      }
       const defaultLocalUser: AppUser = {
         uid: 'local-default-user',
         email: 'local@myroutine.local',
@@ -79,17 +77,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let unsubscribe = () => {};
     try {
       unsubscribe = onAuthStateChanged(auth, (firebaseUser: User | null) => {
-        if (firebaseUser && !firebaseUser.isAnonymous) {
+        if (firebaseUser) {
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            isAnonymous: false,
+            displayName:
+              firebaseUser.displayName ||
+              (firebaseUser.isAnonymous ? 'Guest User' : firebaseUser.email?.split('@')[0] || 'User'),
+            isAnonymous: firebaseUser.isAnonymous,
             photoURL: firebaseUser.photoURL,
           });
-          setIsDemoMode(false);
+          setIsDemoMode(firebaseUser.isAnonymous);
           setLoading(false);
         } else {
+          // If no Firebase user is logged in, check if storedGuest exists
+          const storedGuest = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_GUEST_KEY) : null;
+          if (storedGuest) {
+            try {
+              const guestData = JSON.parse(storedGuest);
+              setUser(guestData);
+              setIsDemoMode(true);
+              setLoading(false);
+              return;
+            } catch {
+              localStorage.removeItem(LOCAL_GUEST_KEY);
+            }
+          }
           setUser(null);
           setIsDemoMode(false);
           setLoading(false);
@@ -233,10 +246,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInAnonymously = async () => {
-    continueAsGuest();
+    await continueAsGuest();
   };
 
-  const continueAsGuest = () => {
+  const continueAsGuest = async () => {
+    if (isFirebaseConfigured && auth) {
+      try {
+        const cred = await firebaseSignInAnonymously(auth);
+        const guest: AppUser = {
+          uid: cred.user.uid,
+          email: null,
+          displayName: 'Guest User',
+          isAnonymous: true,
+        };
+        localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify(guest));
+        setUser(guest);
+        setIsDemoMode(true);
+        return;
+      } catch (anonErr) {
+        console.warn('Firebase anonymous auth fallback to local:', anonErr);
+      }
+    }
     const guest: AppUser = {
       uid: 'guest-' + Math.random().toString(36).substring(2, 9),
       email: null,

@@ -17,6 +17,9 @@ import {
   Music,
   Video,
   Clock,
+  ListChecks,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { cn } from '@/lib/utils';
@@ -34,6 +37,7 @@ interface ActivityTimelineItemProps {
   onDelete: (occurrence: ActivityOccurrence) => void;
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
+  onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
 }
 
 export function ActivityTimelineItem({
@@ -45,7 +49,9 @@ export function ActivityTimelineItem({
   onDelete,
   onPlayMedia,
   onExecuteAi,
+  onToggleStep,
 }: ActivityTimelineItemProps) {
+  const [showSteps, setShowSteps] = React.useState(true);
   const status = occurrence.log?.status ?? 'pending';
   const isCompleted = status === 'completed';
   const isSkipped = status === 'skipped';
@@ -310,7 +316,7 @@ export function ActivityTimelineItem({
               </button>
             )}
 
-            {!isCompleted && (
+            {!isCompleted && !isSkipped && (
               <button
                 type="button"
                 onClick={() => onUpdateStatus(occurrence, 'skipped')}
@@ -318,6 +324,17 @@ export function ActivityTimelineItem({
                 className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
               >
                 <FastForward className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {isSkipped && (
+              <button
+                type="button"
+                onClick={() => onUpdateStatus(occurrence, 'pending')}
+                title="Unskip activity (reset to pending)"
+                className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-amber-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -361,6 +378,94 @@ export function ActivityTimelineItem({
             </button>
           </div>
         </div>
+
+        {/* Task Steps & Checklist Section */}
+        {occurrence.steps && occurrence.steps.length > 0 && (
+          <div className="mt-3 pt-2.5 border-t border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowSteps(!showSteps)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+              >
+                <ListChecks className="w-3.5 h-3.5 text-blue-400" />
+                <span>Checklist</span>
+                <span className="text-[11px] font-normal text-slate-400">
+                  ({occurrence.completedStepIds?.length || 0}/{occurrence.steps.length})
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'w-3.5 h-3.5 text-slate-400 transition-transform duration-200',
+                    showSteps && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              <div className="flex items-center gap-2">
+                {occurrence.completedStepIds?.length === occurrence.steps.length && (
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="w-2.5 h-2.5" /> All Done
+                  </span>
+                )}
+                {/* Mini Progress Bar */}
+                <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 transition-all duration-300 rounded-full"
+                    style={{
+                      width: `${Math.round(
+                        ((occurrence.completedStepIds?.length || 0) / occurrence.steps.length) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Expanded Steps List */}
+            {showSteps && (
+              <div className="space-y-1.5 pt-1">
+                {occurrence.steps.map((step, idx) => {
+                  const isDone = (occurrence.completedStepIds || []).includes(step.id);
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => onToggleStep?.(occurrence, step.id)}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition cursor-pointer border min-h-[36px]',
+                        isDone
+                          ? 'bg-emerald-950/20 border-emerald-500/20 text-slate-400 hover:bg-emerald-950/30'
+                          : 'bg-slate-800/40 border-white/5 text-slate-200 hover:bg-slate-800 hover:border-white/10'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors',
+                          isDone
+                            ? 'bg-emerald-500 border-emerald-400 text-white'
+                            : 'border-slate-500 bg-slate-900/80 text-transparent'
+                        )}
+                      >
+                        <Check className="w-3 h-3 stroke-[3]" />
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-400 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <span
+                        className={cn(
+                          'text-xs flex-1',
+                          isDone ? 'line-through text-slate-500 font-normal' : 'text-slate-200 font-medium'
+                        )}
+                      >
+                        {step.text}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Optional Notes & Completion Log Info */}
         {(occurrence.notes || occurrence.log?.completionNotes) && (

@@ -30,6 +30,7 @@ interface TodayTimelineProps {
   onDelete: (occurrence: ActivityOccurrence) => void;
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
+  onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
 }
 
 export function TodayTimeline({
@@ -43,6 +44,7 @@ export function TodayTimeline({
   onDelete,
   onPlayMedia,
   onExecuteAi,
+  onToggleStep,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed'>('all');
@@ -257,6 +259,7 @@ export function TodayTimeline({
                 onDelete={onDelete}
                 onPlayMedia={onPlayMedia}
                 onExecuteAi={onExecuteAi}
+                onToggleStep={onToggleStep}
               />
             );
           })}

@@ -90,6 +90,9 @@ export function generateDailyOccurrences(
     const media = override?.modifiedMedia ?? template.media ?? [];
     const durationMinutes = calculateDuration(startTime, endTime);
 
+    const steps = override?.modifiedSteps ?? template.steps ?? [];
+    const completedStepIds = log?.completedStepIds ?? [];
+
     occurrences.push({
       occurrenceId: `${template.id}_${targetDate}`,
       templateId: template.id,
@@ -104,6 +107,8 @@ export function generateDailyOccurrences(
       color: template.color,
       notifications: template.notifications,
       media,
+      steps,
+      completedStepIds,
       aiActionId: template.aiActionId,
       hasOverride: Boolean(override),
       isCancelled: false,
@@ -143,6 +148,7 @@ export function generateDailyOccurrences(
           exceptions: [],
         },
         notifications: [],
+        steps: [],
         notes: log.completionNotes || '',
         color: '#64748b',
         timezone: 'Asia/Kolkata',
@@ -165,6 +171,8 @@ export function generateDailyOccurrences(
         color: fallbackTemplate.color,
         notifications: [],
         media: [],
+        steps: override?.modifiedSteps ?? [],
+        completedStepIds: log.completedStepIds ?? [],
         hasOverride: Boolean(override),
         isCancelled: false,
         isPostponed: Boolean(override?.isPostponed),

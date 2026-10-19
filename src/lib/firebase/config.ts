@@ -37,6 +37,7 @@ if (!getApps().length) {
   try {
     if (typeof window !== 'undefined') {
       db = initializeFirestore(app, {
+        ignoreUndefinedProperties: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
         }),
@@ -87,6 +88,28 @@ export const isFirebaseConfigured = Boolean(
   auth &&
   typeof (auth as any).onAuthStateChanged === 'function'
 );
+/**
+ * Recursively strips undefined values from an object or array so Firestore
+ * setDoc / updateDoc operations never fail with "Unsupported field value: undefined".
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => cleanForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const res: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (val !== undefined) {
+        res[key] = cleanForFirestore(val);
+      }
+    }
+    return res as T;
+  }
+  return data;
+}
 
 export function canSyncWithFirestore(userId?: string): boolean {
   if (

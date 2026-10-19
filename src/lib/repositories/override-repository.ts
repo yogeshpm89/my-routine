@@ -1,6 +1,7 @@
 import { OccurrenceOverride } from '@/types/routine';
-import { db, canSyncWithFirestore } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
+import { SyncEngine } from '@/lib/sync/sync-engine';
 import {
   collection,
   doc,
@@ -149,10 +150,12 @@ export class OverrideRepository {
 
     if (canSyncWithFirestore(override.userId)) {
       try {
-        await setDoc(doc(db, `users/${override.userId}/overrides`, override.id), itemToSave);
+        const cleaned = cleanForFirestore(itemToSave);
+        await setDoc(doc(db, `users/${override.userId}/overrides`, override.id), cleaned);
         const q = MutationQueue.getQueue(override.userId);
         const m = q.find((item) => item.collection === 'overrides' && item.docId === override.id);
         if (m) MutationQueue.dequeue(override.userId, m.id);
+        SyncEngine.notifyListeners(override.userId);
       } catch (err) {
         console.warn('Failed to save override to Firestore, queued locally:', err);
       }
@@ -172,6 +175,7 @@ export class OverrideRepository {
         const q = MutationQueue.getQueue(userId);
         const m = q.find((item) => item.collection === 'overrides' && item.docId === overrideId);
         if (m) MutationQueue.dequeue(userId, m.id);
+        SyncEngine.notifyListeners(userId);
       } catch (err) {
         console.warn('Failed to delete override from Firestore, queued locally:', err);
       }

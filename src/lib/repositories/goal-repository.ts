@@ -1,7 +1,8 @@
 import { GoalTarget } from '@/types/routine';
 import { getInitialGoalTargets } from '@/lib/seed-data';
-import { db, canSyncWithFirestore } from '@/lib/firebase/config';
+import { db, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
+import { SyncEngine } from '@/lib/sync/sync-engine';
 import {
   collection,
   doc,
@@ -144,10 +145,12 @@ export class GoalRepository {
 
     if (canSyncWithFirestore(goal.userId)) {
       try {
-        await setDoc(doc(db, `users/${goal.userId}/goals`, goal.id), itemToSave);
+        const cleaned = cleanForFirestore(itemToSave);
+        await setDoc(doc(db, `users/${goal.userId}/goals`, goal.id), cleaned);
         const q = MutationQueue.getQueue(goal.userId);
         const m = q.find((item) => item.collection === 'goals' && item.docId === goal.id);
         if (m) MutationQueue.dequeue(goal.userId, m.id);
+        SyncEngine.notifyListeners(goal.userId);
       } catch (err) {
         console.warn('Failed to save goal to Firestore, queued locally:', err);
       }
@@ -167,6 +170,7 @@ export class GoalRepository {
         const q = MutationQueue.getQueue(userId);
         const m = q.find((item) => item.collection === 'goals' && item.docId === goalId);
         if (m) MutationQueue.dequeue(userId, m.id);
+        SyncEngine.notifyListeners(userId);
       } catch (err) {
         console.warn('Failed to delete goal from Firestore, queued locally:', err);
       }

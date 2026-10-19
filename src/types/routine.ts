@@ -63,6 +63,13 @@ export const MediaAttachmentSchema = z.object({
 });
 export type MediaAttachment = z.infer<typeof MediaAttachmentSchema>;
 
+export const TaskStepSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1, 'Step text is required'),
+  isCompleted: z.boolean().default(false),
+});
+export type TaskStep = z.infer<typeof TaskStepSchema>;
+
 export const RoutineTemplateSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -74,6 +81,7 @@ export const RoutineTemplateSchema = z.object({
   recurrence: RecurrenceRuleSchema,
   notifications: z.array(NotificationRuleSchema).default([]),
   media: z.array(MediaAttachmentSchema).optional(),
+  steps: z.array(TaskStepSchema).optional(),
   aiActionId: z.string().optional(),
   notes: z.string().default(''),
   color: z.string().default('#3b82f6'),
@@ -98,6 +106,7 @@ export const OccurrenceOverrideSchema = z.object({
   postponedToDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notes: z.string().optional(),
   modifiedMedia: z.array(MediaAttachmentSchema).optional(),
+  modifiedSteps: z.array(TaskStepSchema).optional(),
   updatedAt: z.number(),
 });
 export type OccurrenceOverride = z.infer<typeof OccurrenceOverrideSchema>;
@@ -123,6 +132,7 @@ export const ActivityLogSchema = z.object({
   actualDurationMinutes: z.number().default(0),
   targetDurationMinutes: z.number().default(0),
   completionNotes: z.string().default(''),
+  completedStepIds: z.array(z.string()).optional(),
   updatedAt: z.number(),
 });
 export type ActivityLog = z.infer<typeof ActivityLogSchema>;
@@ -159,6 +169,8 @@ export interface ActivityOccurrence {
   color: string;
   notifications: NotificationRule[];
   media?: MediaAttachment[];
+  steps?: TaskStep[];
+  completedStepIds?: string[];
   aiActionId?: string;
   hasOverride: boolean;
   isCancelled: boolean;
