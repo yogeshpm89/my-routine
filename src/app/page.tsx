@@ -39,6 +39,9 @@ import { AiActionConfig } from '@/types/ai';
 import { AiActionRepository } from '@/lib/repositories/ai-action-repository';
 import { AiActionsHub } from '@/components/ai/ai-actions-hub';
 import { AiExecutionDialog } from '@/components/ai/ai-execution-dialog';
+import { UpdateManager } from '@/lib/updates/update-manager';
+import { AppUpdateManifest } from '@/types/updates';
+import { InAppUpdateModal } from '@/components/updates/in-app-update-modal';
 import {
   Clock,
   CalendarDays,
@@ -105,6 +108,47 @@ export default function RoutineApp() {
   const [executingAiAction, setExecutingAiAction] = useState<AiActionConfig | null>(null);
   const [executingRoutineTitle, setExecutingRoutineTitle] = useState<string>('');
   const [aiExecutionDialogOpen, setAiExecutionDialogOpen] = useState(false);
+
+  // In-app update state
+  const [updateManifest, setUpdateManifest] = useState<AppUpdateManifest | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [currentAppVersion, setCurrentAppVersion] = useState('1.0.0');
+  const [isCriticalUpdate, setIsCriticalUpdate] = useState(false);
+
+  // Auto-check for updates on launch
+  useEffect(() => {
+    let isMounted = true;
+    const checkUpdates = async () => {
+      try {
+        const info = await UpdateManager.getCurrentVersionInfo();
+        if (!isMounted) return;
+        setCurrentAppVersion(info.version);
+
+        const prefs = UpdateManager.getPreferences();
+        if (!prefs.autoCheckOnLaunch) return;
+
+        const result = await UpdateManager.checkForUpdates(false);
+        if (!isMounted) return;
+
+        if (result.isUpdateAvailable && result.manifest) {
+          const isDismissed = UpdateManager.isVersionDismissed(result.manifest.version);
+          if (result.isCritical || !isDismissed) {
+            setUpdateManifest(result.manifest);
+            setIsCriticalUpdate(result.isCritical);
+            setUpdateModalOpen(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Silent auto-update check error:', err);
+      }
+    };
+
+    const timer = setTimeout(checkUpdates, 2000);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, []);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
@@ -937,6 +981,18 @@ export default function RoutineApp() {
             onClose={() => {
               setAiExecutionDialogOpen(false);
               setExecutingAiAction(null);
+            }}
+          />
+
+          <InAppUpdateModal
+            isOpen={updateModalOpen}
+            manifest={updateManifest}
+            currentVersion={currentAppVersion}
+            isCritical={isCriticalUpdate}
+            onClose={() => setUpdateModalOpen(false)}
+            onDismissUpdate={(v) => {
+              UpdateManager.dismissVersion(v);
+              setUpdateModalOpen(false);
             }}
           />
 

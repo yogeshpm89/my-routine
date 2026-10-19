@@ -292,6 +292,12 @@ export function MobileDrawer({
               <span>Sign Out of Account</span>
             </button>
           )}
+
+          <div className="pt-1 text-center">
+            <span className="text-[10px] text-slate-500 font-mono">
+              My Routine • In-App Cloud Updates Active
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -20,7 +20,11 @@ import {
   ShieldCheck,
   Smartphone,
   CloudUpload,
+  Sparkles,
 } from 'lucide-react';
+import { UpdateManager } from '@/lib/updates/update-manager';
+import { UpdateCheckResult, AppUpdateManifest } from '@/types/updates';
+import { InAppUpdateModal } from '@/components/updates/in-app-update-modal';
 
 interface SettingsTabProps {
   userId: string;
@@ -35,6 +39,56 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Software Updates state
+  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0');
+  const [currentBuild, setCurrentBuild] = useState<string>('1');
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
+  const [lastCheckedTime, setLastCheckedTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    UpdateManager.getCurrentVersionInfo().then((info) => {
+      setCurrentVersion(info.version);
+      setCurrentBuild(info.build || '1');
+    });
+    const prefs = UpdateManager.getPreferences();
+    setAutoCheckUpdates(prefs.autoCheckOnLaunch ?? true);
+    setLastCheckedTime(prefs.lastCheckedAt || null);
+  }, []);
+
+  const handleCheckUpdate = async (isManual: boolean = true) => {
+    setIsCheckingUpdate(true);
+    setStatusMessage('Checking for app updates...');
+    try {
+      const result = await UpdateManager.checkForUpdates(isManual);
+      setUpdateResult(result);
+      setLastCheckedTime(Date.now());
+      if (result.isUpdateAvailable) {
+        setStatusMessage(`Update available: v${result.latestVersion}!`);
+        if (isManual) {
+          setUpdateModalOpen(true);
+        }
+      } else {
+        setStatusMessage(`You are using the latest version (v${result.currentVersion}).`);
+      }
+    } catch (err) {
+      console.error('Update check failed:', err);
+      setStatusMessage('Could not check for updates.');
+    } finally {
+      setIsCheckingUpdate(false);
+      setTimeout(() => setStatusMessage(null), 4000);
+    }
+  };
+
+  const handleToggleAutoCheck = () => {
+    const next = !autoCheckUpdates;
+    setAutoCheckUpdates(next);
+    const prefs = UpdateManager.getPreferences();
+    UpdateManager.savePreferences({ ...prefs, autoCheckOnLaunch: next });
+  };
 
   useEffect(() => {
     const unsub = SyncEngine.subscribeSync((state, count) => {
@@ -223,6 +277,96 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
 
       {/* Native Notifications & Zepp Smartwatch Settings */}
       <NotificationSettingsPanel userId={userId} />
+
+      {/* Mobile & Web In-App Updates Card */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">Software Updates</h3>
+                <span className="text-[11px] font-mono text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-white/10">
+                  v{currentVersion} (Build {currentBuild})
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Direct in-app release checks and 1-tap APK installation
+              </p>
+            </div>
+          </div>
+
+          {updateResult?.isUpdateAvailable && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-3 py-1 rounded-full animate-pulse self-start sm:self-auto">
+              <Sparkles className="w-3.5 h-3.5" /> Update v{updateResult.latestVersion} Available
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoCheckUpdates}
+                onChange={handleToggleAutoCheck}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+              />
+              <span>Check for updates automatically on launch</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {updateResult?.isUpdateAvailable && updateResult.manifest && (
+              <button
+                type="button"
+                id="btn-view-update"
+                onClick={() => setUpdateModalOpen(true)}
+                className="min-h-[44px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/25 active:scale-95 transition cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>View & Install Update</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              id="btn-check-updates"
+              onClick={() => handleCheckUpdate(true)}
+              disabled={isCheckingUpdate}
+              className="min-h-[44px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs sm:text-sm font-semibold border border-white/10 transition disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${isCheckingUpdate ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
+              <span>{isCheckingUpdate ? 'Checking Cloud...' : 'Check for Updates'}</span>
+            </button>
+          </div>
+        </div>
+
+        {lastCheckedTime && (
+          <p className="text-[11px] text-slate-500 pt-0.5">
+            Last checked:{' '}
+            {new Date(lastCheckedTime).toLocaleDateString([], {
+              month: 'short',
+              day: 'numeric',
+            })}{' '}
+            at{' '}
+            {new Date(lastCheckedTime).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </p>
+        )}
+      </div>
+
+      <InAppUpdateModal
+        isOpen={updateModalOpen}
+        manifest={updateResult?.manifest || null}
+        currentVersion={currentVersion}
+        isCritical={updateResult?.isCritical}
+        onClose={() => setUpdateModalOpen(false)}
+      />
 
       {/* Backup, Export & Restore Card */}
       <div className="p-5 sm:p-6 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md space-y-4">

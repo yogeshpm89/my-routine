@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download My Routine APK</title>
+  <link rel="icon" href="/MyRoutine.png">
+  <style>
+    :root {
+      --bg: #030712;
+      --card: #0f172a;
+      --accent: #2563eb;
+      --accent-glow: #3b82f6;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      position: relative;
+      overflow-x: hidden;
+    }
+    .glow {
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(37, 99, 235, 0.25) 0%, rgba(0,0,0,0) 70%);
+      top: 15%;
+      pointer-events: none;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 2rem;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      text-align: center;
+      position: relative;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 1.25rem;
+      box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4);
+      margin-bottom: 1.25rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.25rem;
+    }
+    .tagline {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+    }
+    .changelog-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 0.875rem;
+      padding: 1rem;
+      text-align: left;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+    }
+    .changelog-box strong {
+      display: block;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .changelog-box ul {
+      padding-left: 1.25rem;
+      line-height: 1.6;
+    }
+    .btn-download {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      color: #ffffff;
+      padding: 0.875rem 1.25rem;
+      border-radius: 0.875rem;
+      font-weight: 700;
+      font-size: 0.9375rem;
+      text-decoration: none;
+      box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.4);
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-download:active {
+      transform: scale(0.98);
+    }
+    .btn-download:hover {
+      opacity: 0.95;
+    }
+    .btn-web {
+      display: inline-block;
+      margin-top: 1rem;
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    .btn-web:hover {
+      color: var(--text);
+    }
+    .instructions {
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: #64748b;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <main class="card">
+    <img src="/MyRoutine.png" alt="My Routine" class="logo">
+    <h1>My Routine</h1>
+    <p class="tagline">Mobile & Web Routine Tracker</p>
+    <div>
+      <span class="badge" id="version-badge">Version 1.1.0 • Release Ready</span>
+    </div>
+
+    <div class="changelog-box">
+      <strong>Highlights in this release</strong>
+      <ul>
+        <li>Interactive Checklist: 1-tap task steps for routines</li>
+        <li>Instant Cloud Sync: Realtime status updates in Firestore</li>
+        <li>In-App Software Updates: Direct APK update manager</li>
+        <li>Enhanced Mobile Navigation Dock & Offline Support</li>
+      </ul>
+    </div>
+
+    <a href="/download/my-routine-release.apk" class="btn-download" id="apk-download-link" download>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span>Download APK (Release v1.1.0)</span>
+    </a>
+
+    <a href="/" class="btn-web">Launch Web App →</a>
+
+    <div class="instructions">
+      To install on Android: Download the APK, open your phone's notification or Downloads folder, and tap to install. If prompted, select "Allow installation from this source".
+    </div>
+  </main>
+</body>
+</html>

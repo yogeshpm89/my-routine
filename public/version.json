@@ -1,0 +1,17 @@
+{
+  "version": "1.1.0",
+  "versionCode": 2,
+  "minSupportedVersion": "1.0.0",
+  "releaseDate": "2026-10-19",
+  "title": "v1.1.0 — Realtime Cloud Sync & Task Steps",
+  "changelog": [
+    "Task Steps & Checklists: Interactive checklist for routines with 1-tap progress",
+    "Real-time Cloud Sync: Instant Firestore sync for start, skip, and completions",
+    "Seamless Offline-to-Cloud merge with zero lost updates",
+    "In-App Updates: Direct 1-tap APK update check and installation",
+    "Enhanced mobile navigation dock with quick unskip capability"
+  ],
+  "apkUrl": "https://my-routine-app-3f631.web.app/download/my-routine-release.apk",
+  "fileSizeBytes": 5120000,
+  "isCritical": false
+}
