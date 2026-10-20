@@ -210,7 +210,7 @@ export class SyncEngine {
     // Clear old subscriptions
     this.stopRealtimeListeners();
 
-    const collections = ['templates', 'overrides', 'logs', 'goals'];
+    const collections = ['templates', 'overrides', 'logs', 'goals', 'life_goals'];
     collections.forEach((colName) => {
       try {
         const colRef = collection(db, `users/${userId}/${colName}`);

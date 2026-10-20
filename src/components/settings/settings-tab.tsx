@@ -5,6 +5,7 @@ import { SyncEngine, SyncState } from '@/lib/sync/sync-engine';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import { BackupService } from '@/lib/sync/backup-service';
 import { NotificationSettingsPanel } from '@/components/notifications/notification-settings-panel';
+import { HolidaySettingsPanel } from './holiday-settings-panel';
 import { useAuth } from '@/lib/firebase/auth-context';
 import {
   Wifi,
@@ -277,6 +278,9 @@ export function SettingsTab({ userId, onDataReset }: SettingsTabProps) {
 
       {/* Native Notifications & Zepp Smartwatch Settings */}
       <NotificationSettingsPanel userId={userId} />
+
+      {/* Holidays & Day Off Management */}
+      <HolidaySettingsPanel userId={userId} onHolidaysChange={onDataReset} />
 
       {/* Mobile & Web In-App Updates Card */}
       <div className="p-5 sm:p-6 rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-md space-y-4">

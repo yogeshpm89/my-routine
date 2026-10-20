@@ -12,8 +12,21 @@ import {
   CheckCircle2,
   Clock,
   ListFilter,
+  Palmtree,
+  CalendarOff,
+  RotateCcw,
+  X,
+  Target,
+  ArrowRight,
 } from 'lucide-react';
-import { addDays, timeToMinutes, getCurrentTimeString, formatDisplayDate, getTodayDateString } from '@/lib/time-utils';
+import { LifeGoal } from '@/types/goals';
+import {
+  addDays,
+  timeToMinutes,
+  getCurrentTimeString,
+  formatDisplayDate,
+  getTodayDateString,
+} from '@/lib/time-utils';
 
 interface TodayTimelineProps {
   occurrences: ActivityOccurrence[];
@@ -31,6 +44,16 @@ interface TodayTimelineProps {
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
+  onOpenSkipModal?: () => void;
+  onResumeCompleteRoutine?: () => void;
+  isWeekend?: boolean;
+  isHoliday?: boolean;
+  holidayName?: string;
+  onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
+  onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
+  onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
+  lifeGoals?: LifeGoal[];
+  onSwitchToGoals?: () => void;
 }
 
 export function TodayTimeline({
@@ -45,9 +68,20 @@ export function TodayTimeline({
   onPlayMedia,
   onExecuteAi,
   onToggleStep,
+  onOpenSkipModal,
+  onResumeCompleteRoutine,
+  isWeekend = false,
+  isHoliday = false,
+  holidayName,
+  onAddComment,
+  onUpdateComment,
+  onDeleteComment,
+  lifeGoals,
+  onSwitchToGoals,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
-  const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'skipped'>('all');
+  const [dismissedSuggestionDate, setDismissedSuggestionDate] = useState<string | null>(null);
 
   useEffect(() => {
     setCurrentTime(getCurrentTimeString('Asia/Kolkata'));
@@ -61,20 +95,32 @@ export function TodayTimeline({
   const formattedDate = formatDisplayDate(selectedDate);
   const todayStr = getTodayDateString('Asia/Kolkata');
 
-  const completedCount = occurrences.filter((o) => o.log?.status === 'completed').length;
-  const pendingCount = occurrences.filter((o) => o.log?.status !== 'completed' && o.log?.status !== 'skipped').length;
   const totalCount = occurrences.length;
+  const completedCount = occurrences.filter((o) => o.log?.status === 'completed').length;
+  const skippedCount = occurrences.filter((o) => o.log?.status === 'skipped').length;
+  const pendingCount = occurrences.filter(
+    (o) => o.log?.status !== 'completed' && o.log?.status !== 'skipped'
+  ).length;
+  const isAllSkipped = totalCount > 0 && skippedCount === totalCount;
   const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   // Filter occurrences
   const filteredOccurrences = occurrences.filter((occ) => {
     if (taskFilter === 'completed') return occ.log?.status === 'completed';
-    if (taskFilter === 'pending') return occ.log?.status !== 'completed' && occ.log?.status !== 'skipped';
+    if (taskFilter === 'skipped') return occ.log?.status === 'skipped';
+    if (taskFilter === 'pending')
+      return occ.log?.status !== 'completed' && occ.log?.status !== 'skipped';
     return true; // 'all'
   });
 
   // 5-day quick selector around selectedDate
   const quickDays = [-2, -1, 0, 1, 2].map((offset) => addDays(selectedDate, offset));
+
+  const showWeekendOrHolidaySuggestion =
+    (isWeekend || isHoliday) &&
+    totalCount > 0 &&
+    !isAllSkipped &&
+    dismissedSuggestionDate !== selectedDate;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -83,7 +129,7 @@ export function TodayTimeline({
         {/* Main Controls Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Date Selector Row */}
-          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto flex-wrap">
             <button
               id="btn-prev-day"
               type="button"
@@ -100,6 +146,22 @@ export function TodayTimeline({
               <span className="text-xs sm:text-sm font-semibold text-white whitespace-nowrap">
                 {formattedDate}
               </span>
+
+              {isHoliday && (
+                <span
+                  title={holidayName || 'Holiday'}
+                  className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 truncate max-w-[120px]"
+                >
+                  🏖️ {holidayName || 'Holiday'}
+                </span>
+              )}
+
+              {isWeekend && !isHoliday && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  🌴 Weekend
+                </span>
+              )}
+
               <input
                 type="date"
                 value={selectedDate}
@@ -128,9 +190,9 @@ export function TodayTimeline({
             </button>
           </div>
 
-          {/* Progress & Add Action */}
-          <div className="flex items-center gap-2.5 justify-between sm:justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-white/5">
-            {totalCount > 0 ? (
+          {/* Progress & Actions Row */}
+          <div className="flex items-center gap-2 sm:gap-2.5 justify-between sm:justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-white/5 flex-wrap">
+            {totalCount > 0 && !isAllSkipped ? (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-400 text-xs">
                   {completedCount}/{totalCount} done
@@ -139,10 +201,43 @@ export function TodayTimeline({
                   {completionPercentage}%
                 </span>
               </div>
+            ) : isAllSkipped ? (
+              <div className="flex items-center gap-1.5 text-xs text-amber-300">
+                <span className="px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 text-xs font-bold border border-amber-500/30">
+                  🌴 Day Off
+                </span>
+              </div>
             ) : (
               <div />
             )}
 
+            {/* Skip Routine / Resume Routine Action Button */}
+            {isAllSkipped ? (
+              <button
+                id="btn-resume-routine"
+                type="button"
+                onClick={onResumeCompleteRoutine}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] text-xs sm:text-sm font-semibold rounded-xl bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                title="Resume complete routine for this day"
+              >
+                <RotateCcw className="w-4 h-4 text-amber-400" />
+                <span>Resume Routine</span>
+              </button>
+            ) : totalCount > 0 ? (
+              <button
+                id="btn-skip-routine"
+                type="button"
+                onClick={onOpenSkipModal}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] text-xs sm:text-sm font-medium rounded-xl bg-slate-800/90 hover:bg-rose-950/40 hover:text-rose-300 hover:border-rose-500/30 text-slate-300 border border-white/10 transition-all active:scale-[0.98] cursor-pointer"
+                title="Skip complete routine on holiday / weekend"
+              >
+                <Palmtree className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="hidden xs:inline">Skip Routine</span>
+                <span className="xs:hidden">Skip</span>
+              </button>
+            ) : null}
+
+            {/* Add Activity Button */}
             <button
               id="btn-create-activity"
               type="button"
@@ -162,7 +257,10 @@ export function TodayTimeline({
             const isToday = dStr === todayStr;
             const [y, m, d] = dStr.split('-').map(Number);
             const dateObj = new Date(Date.UTC(y, m - 1, d));
-            const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(dateObj);
+            const dayName = new Intl.DateTimeFormat('en-US', {
+              weekday: 'short',
+              timeZone: 'UTC',
+            }).format(dateObj);
             const dayNum = dateObj.getUTCDate();
 
             return (
@@ -176,7 +274,11 @@ export function TodayTimeline({
                     : 'bg-slate-800/60 border-white/5 text-slate-300 hover:bg-slate-800'
                 }`}
               >
-                <span className={`text-[10px] font-bold uppercase leading-none ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                <span
+                  className={`text-[10px] font-bold uppercase leading-none ${
+                    isSelected ? 'text-blue-100' : 'text-slate-400'
+                  }`}
+                >
                   {isToday ? 'Today' : dayName}
                 </span>
                 <span className="text-xs sm:text-sm font-extrabold mt-0.5 leading-none">
@@ -188,9 +290,133 @@ export function TodayTimeline({
         </div>
       </div>
 
+      {/* Complete Routine Skipped Hero Banner (When all activities are skipped) */}
+      {isAllSkipped && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900/90 to-slate-900/60 border border-amber-500/30 shadow-xl space-y-3 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                <Palmtree className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-extrabold text-white">
+                    Complete Routine Skipped
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Day Off
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  All {totalCount} routine activities for this day are paused. Notifications are
+                  silenced so you can rest and recharge.
+                </p>
+              </div>
+            </div>
+
+            <button
+              id="btn-hero-resume-routine"
+              type="button"
+              onClick={onResumeCompleteRoutine}
+              className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-amber-600/25 transition active:scale-95 cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Resume Routine</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Smart Weekend / Holiday Suggestion Banner (If day off detected & routine active) */}
+      {showWeekendOrHolidaySuggestion && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0">
+              <Palmtree className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-200">
+                  {isHoliday
+                    ? `Holiday: ${holidayName || 'Public Holiday'}`
+                    : 'Weekend Break Detected'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300">
+                  Day Off
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                Want to take the day off? You can skip the complete routine and silence today&apos;s
+                alarms with 1 click.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              id="btn-suggestion-skip-complete-routine"
+              type="button"
+              onClick={onOpenSkipModal}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md shadow-amber-600/20 transition active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              <CalendarOff className="w-3.5 h-3.5" />
+              <span>Skip Complete Routine</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDismissedSuggestionDate(selectedDate)}
+              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+              title="Dismiss suggestion"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Active Life Goals Teaser Banner */}
+      {lifeGoals && lifeGoals.length > 0 && onSwitchToGoals && (
+        <div className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900/80 to-slate-900/60 border border-indigo-500/20 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-in fade-in">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300">
+              <Target className="w-4 h-4 text-indigo-400" />
+              <span>Active Goals:</span>
+            </div>
+            {lifeGoals.slice(0, 3).map((g) => {
+              const pct = Math.min(100, Math.round((g.currentValue / g.targetValue) * 100));
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={onSwitchToGoals}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-white/5 text-[11px] text-slate-300 transition cursor-pointer"
+                >
+                  <span className="font-semibold text-white truncate max-w-[140px] sm:max-w-[180px]">
+                    {g.title}
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-400">
+                    {pct}%
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={onSwitchToGoals}
+            className="self-end sm:self-auto inline-flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer"
+          >
+            <span>View Goals</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Task Filter Strip on Mobile & Desktop */}
       {totalCount > 0 && (
-        <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex items-center justify-between gap-2 px-1 flex-wrap">
           <div className="flex items-center gap-1.5 p-1 bg-slate-900/60 border border-white/10 rounded-xl backdrop-blur-md">
             <button
               type="button"
@@ -229,6 +455,21 @@ export function TodayTimeline({
               <span>Done</span>
               <span className="text-[10px] opacity-75">({completedCount})</span>
             </button>
+            {skippedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setTaskFilter('skipped')}
+                className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg transition active:scale-95 cursor-pointer flex items-center gap-1 ${
+                  taskFilter === 'skipped'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-rose-400 hover:text-white'
+                }`}
+              >
+                <CalendarOff className="w-3 h-3" />
+                <span>Skipped</span>
+                <span className="text-[10px] opacity-75">({skippedCount})</span>
+              </button>
+            )}
           </div>
 
           <span className="text-xs text-slate-400 hidden sm:inline">
@@ -260,6 +501,9 @@ export function TodayTimeline({
                 onPlayMedia={onPlayMedia}
                 onExecuteAi={onExecuteAi}
                 onToggleStep={onToggleStep}
+                onAddComment={onAddComment}
+                onUpdateComment={onUpdateComment}
+                onDeleteComment={onDeleteComment}
               />
             );
           })}
@@ -270,8 +514,10 @@ export function TodayTimeline({
           <h3 className="text-base font-bold text-white">No tasks match this filter</h3>
           <p className="text-xs text-slate-400">
             {taskFilter === 'pending'
-              ? 'All scheduled routines for this day are completed!'
-              : 'No activities have been logged as completed yet.'}
+              ? 'All scheduled routines for this day are completed or skipped!'
+              : taskFilter === 'completed'
+              ? 'No activities have been logged as completed yet.'
+              : 'No activities have been marked as skipped.'}
           </p>
           <button
             type="button"
@@ -286,7 +532,8 @@ export function TodayTimeline({
           <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
           <h3 className="text-lg font-bold text-white">No activities for this day</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            You don&apos;t have any scheduled routines or tasks for {formattedDate}. Tap below to create one.
+            You don&apos;t have any scheduled routines or tasks for {formattedDate}. Tap below to
+            create one.
           </p>
           <button
             type="button"

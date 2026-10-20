@@ -20,6 +20,10 @@ import {
   ListChecks,
   Check,
   ChevronDown,
+  MessageSquare,
+  Send,
+  X,
+  FileText,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { cn } from '@/lib/utils';
@@ -38,6 +42,9 @@ interface ActivityTimelineItemProps {
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
+  onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
+  onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
+  onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
 }
 
 export function ActivityTimelineItem({
@@ -50,8 +57,37 @@ export function ActivityTimelineItem({
   onPlayMedia,
   onExecuteAi,
   onToggleStep,
+  onAddComment,
+  onUpdateComment,
+  onDeleteComment,
 }: ActivityTimelineItemProps) {
   const [showSteps, setShowSteps] = React.useState(true);
+  const [showComments, setShowComments] = React.useState(false);
+  const [newCommentText, setNewCommentText] = React.useState('');
+  const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
+  const [editingText, setEditingText] = React.useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = React.useState(false);
+
+  const comments = occurrence.comments || occurrence.log?.comments || [];
+  const allComments = [
+    ...comments,
+    ...(occurrence.log?.completionNotes && !comments.some((c) => c.text === occurrence.log?.completionNotes)
+      ? [{ id: `log_note_${occurrence.occurrenceId}`, text: occurrence.log.completionNotes, createdAt: occurrence.log.updatedAt || Date.now() }]
+      : []),
+  ];
+
+  const handleAddCommentSubmit = async () => {
+    if (!newCommentText.trim() || isSubmittingComment) return;
+    setIsSubmittingComment(true);
+    try {
+      await onAddComment?.(occurrence, newCommentText.trim());
+      setNewCommentText('');
+      setShowComments(true);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
   const status = occurrence.log?.status ?? 'pending';
   const isCompleted = status === 'completed';
   const isSkipped = status === 'skipped';
@@ -351,6 +387,27 @@ export function ActivityTimelineItem({
 
             <button
               type="button"
+              onClick={() => setShowComments(!showComments)}
+              title={allComments.length > 0 ? `${allComments.length} comment(s) / notes` : 'Add comment / note'}
+              className={cn(
+                'min-w-[36px] min-h-[36px] p-2 rounded-xl transition flex items-center justify-center active:scale-95 cursor-pointer relative',
+                showComments
+                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
+                  : allComments.length > 0
+                  ? 'text-blue-400 hover:text-blue-300 hover:bg-slate-800'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              )}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              {allComments.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-bold flex items-center justify-center border border-slate-900 shadow-sm">
+                  {allComments.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
               onClick={() => onEdit(occurrence)}
               title="Edit routine"
               className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
@@ -467,17 +524,175 @@ export function ActivityTimelineItem({
           </div>
         )}
 
-        {/* Optional Notes & Completion Log Info */}
-        {(occurrence.notes || occurrence.log?.completionNotes) && (
-          <div className="mt-2.5 pt-2 border-t border-white/5 text-xs text-slate-400 space-y-1">
-            {occurrence.notes && <p className="line-clamp-2">{occurrence.notes}</p>}
-            {occurrence.log?.completionNotes && (
-              <p className="text-emerald-400/90 font-medium bg-emerald-950/40 px-2 py-1 rounded border border-emerald-500/20">
-                Log: {occurrence.log.completionNotes}
-              </p>
+        {/* Comments & Daily Activity Notes Section */}
+        <div className="mt-3 pt-2.5 border-t border-white/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowComments(!showComments)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
+              <span>Comments & Notes</span>
+              {allComments.length > 0 && (
+                <span className="text-[10px] font-bold text-blue-300 px-1.5 py-0.2 rounded-full bg-blue-500/20 border border-blue-500/30">
+                  {allComments.length}
+                </span>
+              )}
+              <ChevronDown
+                className={cn(
+                  'w-3.5 h-3.5 text-slate-400 transition-transform duration-200',
+                  showComments && 'rotate-180'
+                )}
+              />
+            </button>
+
+            {!showComments && (
+              <button
+                type="button"
+                onClick={() => setShowComments(true)}
+                className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold hover:underline cursor-pointer"
+              >
+                + Add Note
+              </button>
             )}
           </div>
-        )}
+
+          {/* Routine Template Guidance Note (if exists on template) */}
+          {occurrence.notes && !showComments && (
+            <div className="text-[11px] text-slate-400 italic line-clamp-1">
+              &ldquo;{occurrence.notes}&rdquo;
+            </div>
+          )}
+
+          {/* Expanded Comments Container */}
+          {showComments && (
+            <div className="space-y-2.5 pt-1 animate-in fade-in duration-150">
+              {occurrence.notes && (
+                <div className="text-[11px] text-slate-300 bg-slate-800/40 border border-white/5 p-2 rounded-xl">
+                  <span className="font-semibold text-slate-400 block mb-0.5">💡 Activity Notes:</span>
+                  <p>{occurrence.notes}</p>
+                </div>
+              )}
+
+              {/* List of Comments for this Day */}
+              {allComments.length > 0 ? (
+                <div className="space-y-2">
+                  {allComments.map((comment) => {
+                    const isEditing = editingCommentId === comment.id;
+                    const dateFormatted = new Date(comment.createdAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
+
+                    return (
+                      <div
+                        key={comment.id}
+                        className="p-2.5 rounded-xl bg-slate-800/60 border border-white/5 space-y-1.5 text-xs group"
+                      >
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              rows={2}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-blue-500/50 text-xs text-white focus:outline-none"
+                              placeholder="Edit comment..."
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingCommentId(null)}
+                                className="px-2.5 py-1 rounded text-[11px] text-slate-400 hover:text-white"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!editingText.trim()) return;
+                                  await onUpdateComment?.(occurrence, comment.id, editingText);
+                                  setEditingCommentId(null);
+                                }}
+                                className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-0.5 flex-1">
+                              <p className="text-slate-200 text-xs whitespace-pre-wrap leading-relaxed">
+                                {comment.text}
+                              </p>
+                              <span className="text-[10px] text-slate-500 block">
+                                {dateFormatted}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingCommentId(comment.id);
+                                  setEditingText(comment.text);
+                                }}
+                                className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-slate-700/60 transition cursor-pointer"
+                                title="Edit note"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteComment?.(occurrence, comment.id)}
+                                className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                                title="Delete note"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 italic py-1">
+                  No comments or notes added for this activity today yet.
+                </p>
+              )}
+
+              {/* Add Comment Input Form */}
+              <div className="pt-1">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <textarea
+                    value={newCommentText}
+                    onChange={(e) => setNewCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        handleAddCommentSubmit();
+                      }
+                    }}
+                    rows={2}
+                    placeholder="Write a comment or note for today's activity... (Ctrl+Enter to post)"
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-800/90 border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
+                  />
+                  <button
+                    type="button"
+                    disabled={!newCommentText.trim() || isSubmittingComment}
+                    onClick={handleAddCommentSubmit}
+                    className="self-end sm:self-auto min-h-[38px] px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer shadow-md shadow-blue-600/20 active:scale-95"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Post</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

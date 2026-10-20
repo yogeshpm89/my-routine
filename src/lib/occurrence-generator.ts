@@ -92,6 +92,7 @@ export function generateDailyOccurrences(
 
     const steps = override?.modifiedSteps ?? template.steps ?? [];
     const completedStepIds = log?.completedStepIds ?? [];
+    const comments = log?.comments ?? [];
 
     occurrences.push({
       occurrenceId: `${template.id}_${targetDate}`,
@@ -109,6 +110,7 @@ export function generateDailyOccurrences(
       media,
       steps,
       completedStepIds,
+      comments,
       aiActionId: template.aiActionId,
       hasOverride: Boolean(override),
       isCancelled: false,
@@ -173,6 +175,7 @@ export function generateDailyOccurrences(
         media: [],
         steps: override?.modifiedSteps ?? [],
         completedStepIds: log.completedStepIds ?? [],
+        comments: log.comments ?? [],
         hasOverride: Boolean(override),
         isCancelled: false,
         isPostponed: Boolean(override?.isPostponed),

@@ -17,7 +17,7 @@ import { LogRepository } from '@/lib/repositories/log-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { detectScheduleConflicts } from '@/lib/conflict-detector';
-import { getTodayDateString, addDays, getDayOfWeek, calculateDuration } from '@/lib/time-utils';
+import { getTodayDateString, addDays, getDayOfWeek, calculateDuration, formatDisplayDate } from '@/lib/time-utils';
 import { CurrentActivityCard } from '@/components/routine/current-activity-card';
 import { TodayTimeline } from '@/components/routine/today-timeline';
 import { ConflictBanner } from '@/components/routine/conflict-banner';
@@ -42,6 +42,11 @@ import { AiExecutionDialog } from '@/components/ai/ai-execution-dialog';
 import { UpdateManager } from '@/lib/updates/update-manager';
 import { AppUpdateManifest } from '@/types/updates';
 import { InAppUpdateModal } from '@/components/updates/in-app-update-modal';
+import { HolidayService } from '@/lib/holidays/holiday-service';
+import { SkipCompleteRoutineModal } from '@/components/routine/skip-complete-routine-modal';
+import { LifeGoal, GoalTrackedItem, GoalExperienceEntry } from '@/types/goals';
+import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
+import { GoalsDashboard } from '@/components/goals/goals-dashboard';
 import {
   Clock,
   CalendarDays,
@@ -58,6 +63,7 @@ import {
   LogIn,
   UserPlus,
   Menu,
+  Target,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { canSyncWithFirestore } from '@/lib/firebase/config';
@@ -75,7 +81,7 @@ export default function RoutineApp() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
 
   const [selectedDate, setSelectedDate] = useState<string>('2026-10-15');
-  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month' | 'ai' | 'analytics' | 'settings'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month' | 'goals' | 'ai' | 'analytics' | 'settings'>('today');
 
   useEffect(() => {
     setSelectedDate(getTodayDateString('Asia/Kolkata'));
@@ -85,6 +91,7 @@ export default function RoutineApp() {
   const [overrides, setOverrides] = useState<OccurrenceOverride[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [goals, setGoals] = useState<GoalTarget[]>([]);
+  const [lifeGoals, setLifeGoals] = useState<LifeGoal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Modal states
@@ -99,6 +106,9 @@ export default function RoutineApp() {
 
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [quickLogOccurrence, setQuickLogOccurrence] = useState<ActivityOccurrence | null>(null);
+
+  // Skip complete routine state
+  const [skipRoutineModalOpen, setSkipRoutineModalOpen] = useState(false);
 
   // In-app media player state
   const [activeMediaOccurrence, setActiveMediaOccurrence] = useState<ActivityOccurrence | null>(null);
@@ -194,11 +204,12 @@ export default function RoutineApp() {
     setOverrides(OverrideRepository.getLocalOverrides(userId));
     setLogs(LogRepository.getLocalLogs(userId));
     setGoals(GoalRepository.getLocalGoals(userId));
+    setLifeGoals(LifeGoalRepository.getLocalLifeGoals(userId));
     setIsLoading(false);
 
     if (!isCloudSynced) return;
 
-    // Attach real-time onSnapshot listeners to all 4 Firestore subcollections
+    // Attach real-time onSnapshot listeners to Firestore subcollections
     const unsubTemplates = RoutineRepository.subscribeTemplates(userId, (newTemplates) => {
       setTemplates(newTemplates);
     });
@@ -213,6 +224,10 @@ export default function RoutineApp() {
 
     const unsubGoals = GoalRepository.subscribeGoals(userId, (newGoals) => {
       setGoals(newGoals);
+    });
+
+    const unsubLifeGoals = LifeGoalRepository.subscribeLifeGoals(userId, (newLifeGoals) => {
+      setLifeGoals(newLifeGoals);
     });
 
     const unsubConflicts = SyncEngine.subscribeConflicts(setSyncConflicts);
@@ -231,6 +246,7 @@ export default function RoutineApp() {
       unsubOverrides();
       unsubLogs();
       unsubGoals();
+      unsubLifeGoals();
       unsubConflicts();
       unsubSyncState();
     };
@@ -252,6 +268,424 @@ export default function RoutineApp() {
   const handleDeleteGoal = async (goalId: string) => {
     await GoalRepository.deleteGoal(userId, goalId);
     showToast('Deleted goal target');
+  };
+
+  const handleSaveLifeGoal = async (goal: LifeGoal) => {
+    const updated = await LifeGoalRepository.saveGoal(goal);
+    setLifeGoals((prev) => {
+      const idx = prev.findIndex((g) => g.id === updated.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updated;
+        return copy;
+      }
+      return [...prev, updated];
+    });
+    showToast(`Saved goal "${goal.title}" ✓`);
+  };
+
+  const handleDeleteLifeGoal = async (goalId: string) => {
+    await LifeGoalRepository.deleteGoal(userId, goalId);
+    setLifeGoals((prev) => prev.filter((g) => g.id !== goalId));
+    showToast('Deleted life goal');
+  };
+
+  const handleLogGoalProgress = async (
+    goalId: string,
+    valueChange: number,
+    note: string,
+    date: string
+  ) => {
+    const updated = await LifeGoalRepository.logProgress(userId, goalId, valueChange, note, date);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast(updated.status === 'completed' ? '🎉 Goal accomplished!' : 'Progress recorded ✓');
+    }
+  };
+
+  const handleToggleGoalMilestone = async (goalId: string, milestoneId: string) => {
+    const updated = await LifeGoalRepository.toggleMilestone(userId, goalId, milestoneId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast(updated.status === 'completed' ? '🎉 All milestones completed!' : 'Milestone updated ✓');
+    }
+  };
+
+  // Life Goal Checklist Handlers
+  const handleAddGoalChecklistItem = async (goalId: string, text: string) => {
+    const updated = await LifeGoalRepository.addChecklistItem(userId, goalId, text);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Checklist task added ✓');
+    }
+  };
+
+  const handleToggleGoalChecklistItem = async (goalId: string, itemId: string) => {
+    const updated = await LifeGoalRepository.toggleChecklistItem(userId, goalId, itemId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+    }
+  };
+
+  const handleDeleteGoalChecklistItem = async (goalId: string, itemId: string) => {
+    const updated = await LifeGoalRepository.deleteChecklistItem(userId, goalId, itemId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Checklist task removed');
+    }
+  };
+
+  // Life Goal Comments & Reflections Handlers
+  const handleAddGoalComment = async (goalId: string, text: string) => {
+    const updated = await LifeGoalRepository.addGoalComment(userId, goalId, text);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Note added ✓');
+    }
+  };
+
+  const handleUpdateGoalComment = async (goalId: string, commentId: string, text: string) => {
+    const updated = await LifeGoalRepository.updateGoalComment(userId, goalId, commentId, text);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Note updated ✓');
+    }
+  };
+
+  const handleDeleteGoalComment = async (goalId: string, commentId: string) => {
+    const updated = await LifeGoalRepository.deleteGoalComment(userId, goalId, commentId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Note deleted');
+    }
+  };
+
+  // Life Goal Activity Tracking Handler
+  const handleRecordGoalActivity = async (
+    goalId: string,
+    data: {
+      date: string;
+      activityTitle: string;
+      durationMinutes: number;
+      notes: string;
+      templateId?: string;
+      incrementProgress: boolean;
+    }
+  ) => {
+    const updated = await LifeGoalRepository.recordActivityForGoal(userId, goalId, data);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast(
+        data.incrementProgress
+          ? `Recorded activity session & advanced progress (+1 ${updated.unit || 'unit'}) ✓`
+          : 'Activity session recorded ✓'
+      );
+    }
+  };
+
+  // Tracked Items Handlers (Books, Courses, Audio Links, Local Paths)
+  const handleSaveGoalTrackedItem = async (
+    goalId: string,
+    itemData: Omit<GoalTrackedItem, 'id' | 'createdAt' | 'updatedAt'>,
+    itemId?: string
+  ) => {
+    let updated: LifeGoal | null;
+    if (itemId) {
+      updated = await LifeGoalRepository.updateTrackedItem(userId, goalId, itemId, itemData);
+    } else {
+      updated = await LifeGoalRepository.addTrackedItem(userId, goalId, itemData);
+    }
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast(itemId ? 'Item updated ✓' : 'Item added ✓');
+    }
+  };
+
+  const handleDeleteGoalTrackedItem = async (goalId: string, itemId: string) => {
+    const updated = await LifeGoalRepository.deleteTrackedItem(userId, goalId, itemId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Item deleted');
+    }
+  };
+
+  const handleUpdateItemProgress = async (
+    goalId: string,
+    itemId: string,
+    currentUnits: number,
+    markCompleted?: boolean
+  ) => {
+    const updated = await LifeGoalRepository.updateItemProgress(
+      userId,
+      goalId,
+      itemId,
+      currentUnits,
+      markCompleted
+    );
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast(markCompleted ? '🎉 Marked as completed!' : 'Progress updated ✓');
+    }
+  };
+
+  // Structured Phases Handlers
+  const handleTogglePhaseStatus = async (goalId: string, phaseId: string) => {
+    const updated = await LifeGoalRepository.togglePhaseStatus(userId, goalId, phaseId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Phase status updated ✓');
+    }
+  };
+
+  const handleAddPhaseTask = async (goalId: string, phaseId: string, text: string) => {
+    const updated = await LifeGoalRepository.addPhaseTask(userId, goalId, phaseId, text);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Step added ✓');
+    }
+  };
+
+  const handleTogglePhaseTask = async (goalId: string, phaseId: string, taskId: string) => {
+    const updated = await LifeGoalRepository.togglePhaseTask(userId, goalId, phaseId, taskId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+    }
+  };
+
+  const handleDeletePhaseTask = async (goalId: string, phaseId: string, taskId: string) => {
+    const updated = await LifeGoalRepository.deletePhaseTask(userId, goalId, phaseId, taskId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Step removed');
+    }
+  };
+
+  // Custom Lists Handlers
+  const handleAddNamedList = async (goalId: string, title: string) => {
+    const updated = await LifeGoalRepository.addNamedList(userId, goalId, title);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('List added ✓');
+    }
+  };
+
+  const handleAddListItem = async (goalId: string, listId: string, text: string) => {
+    const updated = await LifeGoalRepository.addListItem(userId, goalId, listId, text);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Task added ✓');
+    }
+  };
+
+  const handleToggleListItem = async (goalId: string, listId: string, itemId: string) => {
+    const updated = await LifeGoalRepository.toggleListItem(userId, goalId, listId, itemId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+    }
+  };
+
+  const handleDeleteListItem = async (goalId: string, listId: string, itemId: string) => {
+    const updated = await LifeGoalRepository.deleteListItem(userId, goalId, listId, itemId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Task removed');
+    }
+  };
+
+  // Experience Journal Handlers
+  const handleAddExperience = async (
+    goalId: string,
+    data: Omit<GoalExperienceEntry, 'id' | 'createdAt'>
+  ) => {
+    const updated = await LifeGoalRepository.addExperienceEntry(userId, goalId, data);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Reflection logged ✓');
+    }
+  };
+
+  const handleDeleteExperience = async (goalId: string, entryId: string) => {
+    const updated = await LifeGoalRepository.deleteExperienceEntry(userId, goalId, entryId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated!.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated!;
+          return copy;
+        }
+        return [...prev, updated!];
+      });
+      showToast('Reflection removed');
+    }
   };
 
   // Reconcile native 72-hour notifications upon routine updates and logs
@@ -291,6 +725,82 @@ export default function RoutineApp() {
   const occurrences = generateDailyOccurrences(templates, overrides, logs, selectedDate);
   const dayOfWeek = getDayOfWeek(selectedDate);
   const conflicts = detectScheduleConflicts(occurrences, goals, dayOfWeek);
+  const dayInfo = HolidayService.getDayTypeInfo(userId, selectedDate);
+
+  // Skip complete routine handler
+  const handleSkipCompleteRoutine = async (
+    scope: 'all' | 'remaining',
+    reason: string,
+    markAsHoliday: boolean,
+    customHolidayName?: string
+  ) => {
+    const targetOccurrences =
+      scope === 'remaining'
+        ? occurrences.filter((o) => o.log?.status !== 'completed' && o.log?.status !== 'skipped')
+        : occurrences;
+
+    if (targetOccurrences.length === 0) {
+      showToast('No activities to skip for this day');
+      return;
+    }
+
+    if (markAsHoliday) {
+      const holidayName = customHolidayName || reason.split(':')[0] || 'Holiday';
+      HolidayService.addHoliday(userId, {
+        date: selectedDate,
+        name: holidayName,
+        isCustom: true,
+      });
+    }
+
+    const templateIds = targetOccurrences.map((o) => o.templateId);
+    const updated = await LogRepository.bulkUpdateStatus(
+      userId,
+      selectedDate,
+      templateIds,
+      'skipped',
+      { completionNotes: reason }
+    );
+
+    setLogs((prev) => {
+      const updatedMap = new Map(updated.map((l) => [l.id, l]));
+      const result = prev.map((l) => updatedMap.get(l.id) || l);
+      for (const l of updated) {
+        if (!prev.some((p) => p.id === l.id)) {
+          result.push(l);
+        }
+      }
+      return result;
+    });
+
+    showToast(`Skipped complete routine for ${formatDisplayDate(selectedDate)} (${reason})`);
+    setSkipRoutineModalOpen(false);
+  };
+
+  // Resume complete routine handler (unskip all skipped activities)
+  const handleResumeCompleteRoutine = async () => {
+    const skippedOccurrences = occurrences.filter((o) => o.log?.status === 'skipped');
+    if (skippedOccurrences.length === 0) {
+      showToast('No skipped activities to resume');
+      return;
+    }
+
+    const templateIds = skippedOccurrences.map((o) => o.templateId);
+    const updated = await LogRepository.bulkResetToPending(userId, selectedDate, templateIds);
+
+    setLogs((prev) => {
+      const updatedMap = new Map(updated.map((l) => [l.id, l]));
+      const result = prev.map((l) => updatedMap.get(l.id) || l);
+      for (const l of updated) {
+        if (!prev.some((p) => p.id === l.id)) {
+          result.push(l);
+        }
+      }
+      return result;
+    });
+
+    showToast(`Resumed complete routine for ${formatDisplayDate(selectedDate)}`);
+  };
 
   // Status updates
   const handleUpdateStatus = async (
@@ -315,6 +825,34 @@ export default function RoutineApp() {
       }
       return [...prev, updated];
     });
+
+    // Auto-sync completed daily routine activities to matching life goals
+    if (status === 'completed') {
+      const duration = occurrence.durationMinutes || calculateDuration(occurrence.startTime, occurrence.endTime);
+      LifeGoalRepository.syncCompletedRoutineToLifeGoals(
+        userId,
+        selectedDate,
+        occurrence.templateId,
+        occurrence.title,
+        duration,
+        occurrence.log?.completionNotes || ''
+      ).then((updatedGoals) => {
+        if (updatedGoals.length > 0) {
+          setLifeGoals((prev) => {
+            const copy = [...prev];
+            for (const ug of updatedGoals) {
+              const idx = copy.findIndex((g) => g.id === ug.id);
+              if (idx >= 0) copy[idx] = ug;
+              else copy.push(ug);
+            }
+            return copy;
+          });
+          showToast(`Synced activity to ${updatedGoals.length} life goal(s) ✓`);
+        }
+      }).catch((err) => {
+        console.warn('Failed to sync completed routine to life goals:', err);
+      });
+    }
 
     const statusAction =
       status === 'in_progress'
@@ -350,6 +888,75 @@ export default function RoutineApp() {
 
     const isDone = updated.completedStepIds?.includes(stepId);
     showToast(isDone ? 'Step completed ✓' : 'Step unchecked');
+  };
+
+  // Activity Comment Handlers
+  const handleAddComment = async (occurrence: ActivityOccurrence, text: string) => {
+    const updated = await LogRepository.addComment(
+      userId,
+      selectedDate,
+      occurrence.templateId,
+      text
+    );
+
+    setLogs((prev) => {
+      const idx = prev.findIndex((l) => l.id === updated.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updated;
+        return copy;
+      }
+      return [...prev, updated];
+    });
+
+    showToast('Note added ✓');
+  };
+
+  const handleUpdateComment = async (
+    occurrence: ActivityOccurrence,
+    commentId: string,
+    text: string
+  ) => {
+    const updated = await LogRepository.updateComment(
+      userId,
+      selectedDate,
+      occurrence.templateId,
+      commentId,
+      text
+    );
+
+    setLogs((prev) => {
+      const idx = prev.findIndex((l) => l.id === updated.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updated;
+        return copy;
+      }
+      return [...prev, updated];
+    });
+
+    showToast('Note updated ✓');
+  };
+
+  const handleDeleteComment = async (occurrence: ActivityOccurrence, commentId: string) => {
+    const updated = await LogRepository.deleteComment(
+      userId,
+      selectedDate,
+      occurrence.templateId,
+      commentId
+    );
+
+    setLogs((prev) => {
+      const idx = prev.findIndex((l) => l.id === updated.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updated;
+        return copy;
+      }
+      return [...prev, updated];
+    });
+
+    showToast('Note deleted');
   };
 
   // Activity Editor Handlers
@@ -596,6 +1203,7 @@ export default function RoutineApp() {
                   { id: 'today', label: 'Day', icon: Clock },
                   { id: 'week', label: 'Week', icon: CalendarDays },
                   { id: 'month', label: 'Month', icon: Calendar },
+                  { id: 'goals', label: 'Goals', icon: Target },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
                   { id: 'settings', label: 'Settings & Sync', icon: Settings },
                 ].map((tab) => {
@@ -832,6 +1440,7 @@ export default function RoutineApp() {
                 }}
                 onExecuteAi={handleExecuteAiForOccurrence}
                 onToggleStep={handleToggleStep}
+                onResumeRoutine={handleResumeCompleteRoutine}
               />
 
               {/* Conflict & Goal Advisory Banner */}
@@ -856,6 +1465,16 @@ export default function RoutineApp() {
                 }}
                 onExecuteAi={handleExecuteAiForOccurrence}
                 onToggleStep={handleToggleStep}
+                onOpenSkipModal={() => setSkipRoutineModalOpen(true)}
+                onResumeCompleteRoutine={handleResumeCompleteRoutine}
+                isWeekend={dayInfo.isWeekend}
+                isHoliday={dayInfo.isHoliday}
+                holidayName={dayInfo.holidayName}
+                onAddComment={handleAddComment}
+                onUpdateComment={handleUpdateComment}
+                onDeleteComment={handleDeleteComment}
+                lifeGoals={lifeGoals}
+                onSwitchToGoals={() => setActiveTab('goals')}
               />
             </>
           )}
@@ -882,6 +1501,38 @@ export default function RoutineApp() {
               goals={goals}
               onSelectDate={setSelectedDate}
               onSwitchToDay={() => setActiveTab('today')}
+            />
+          )}
+
+          {activeTab === 'goals' && (
+            <GoalsDashboard
+              userId={userId}
+              goals={lifeGoals}
+              templates={templates}
+              onSaveGoal={handleSaveLifeGoal}
+              onDeleteGoal={handleDeleteLifeGoal}
+              onLogProgress={handleLogGoalProgress}
+              onToggleMilestone={handleToggleGoalMilestone}
+              onAddChecklistItem={handleAddGoalChecklistItem}
+              onToggleChecklistItem={handleToggleGoalChecklistItem}
+              onDeleteChecklistItem={handleDeleteGoalChecklistItem}
+              onAddComment={handleAddGoalComment}
+              onUpdateComment={handleUpdateGoalComment}
+              onDeleteComment={handleDeleteGoalComment}
+              onRecordActivity={handleRecordGoalActivity}
+              onSaveTrackedItem={handleSaveGoalTrackedItem}
+              onDeleteTrackedItem={handleDeleteGoalTrackedItem}
+              onUpdateItemProgress={handleUpdateItemProgress}
+              onTogglePhaseStatus={handleTogglePhaseStatus}
+              onAddPhaseTask={handleAddPhaseTask}
+              onTogglePhaseTask={handleTogglePhaseTask}
+              onDeletePhaseTask={handleDeletePhaseTask}
+              onAddNamedList={handleAddNamedList}
+              onAddListItem={handleAddListItem}
+              onToggleListItem={handleToggleListItem}
+              onDeleteListItem={handleDeleteListItem}
+              onAddExperience={handleAddExperience}
+              onDeleteExperience={handleDeleteExperience}
             />
           )}
 
@@ -994,6 +1645,17 @@ export default function RoutineApp() {
               UpdateManager.dismissVersion(v);
               setUpdateModalOpen(false);
             }}
+          />
+
+          <SkipCompleteRoutineModal
+            isOpen={skipRoutineModalOpen}
+            date={selectedDate}
+            occurrences={occurrences}
+            isWeekend={dayInfo.isWeekend}
+            isHoliday={dayInfo.isHoliday}
+            holidayName={dayInfo.holidayName}
+            onConfirmSkip={handleSkipCompleteRoutine}
+            onClose={() => setSkipRoutineModalOpen(false)}
           />
 
           {/* Mobile Bottom Navigation Dock */}

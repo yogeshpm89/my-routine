@@ -121,6 +121,14 @@ export const ActivityStatusSchema = z.enum([
 ]);
 export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
 
+export const ActivityCommentSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1, 'Comment text is required'),
+  createdAt: z.number().default(() => Date.now()),
+  updatedAt: z.number().optional(),
+});
+export type ActivityComment = z.infer<typeof ActivityCommentSchema>;
+
 export const ActivityLogSchema = z.object({
   id: z.string(), // format: `${date}_${templateId}`
   userId: z.string(),
@@ -133,6 +141,7 @@ export const ActivityLogSchema = z.object({
   targetDurationMinutes: z.number().default(0),
   completionNotes: z.string().default(''),
   completedStepIds: z.array(z.string()).optional(),
+  comments: z.array(ActivityCommentSchema).optional(),
   updatedAt: z.number(),
 });
 export type ActivityLog = z.infer<typeof ActivityLogSchema>;
@@ -171,6 +180,7 @@ export interface ActivityOccurrence {
   media?: MediaAttachment[];
   steps?: TaskStep[];
   completedStepIds?: string[];
+  comments?: ActivityComment[];
   aiActionId?: string;
   hasOverride: boolean;
   isCancelled: boolean;

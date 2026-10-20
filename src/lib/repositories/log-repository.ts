@@ -1,4 +1,4 @@
-import { ActivityLog, ActivityStatus } from '@/types/routine';
+import { ActivityLog, ActivityStatus, ActivityComment } from '@/types/routine';
 import { db, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import { SyncEngine } from '@/lib/sync/sync-engine';
@@ -183,6 +183,7 @@ export class LogRepository {
       targetDurationMinutes: extra?.targetDurationMinutes ?? existing?.targetDurationMinutes ?? 0,
       completionNotes: extra?.completionNotes ?? existing?.completionNotes ?? '',
       completedStepIds: extra?.completedStepIds ?? existing?.completedStepIds ?? [],
+      comments: existing?.comments ?? [],
       updatedAt: Date.now(),
     };
 
@@ -220,6 +221,198 @@ export class LogRepository {
       targetDurationMinutes: existing?.targetDurationMinutes ?? 0,
       completionNotes: existing?.completionNotes ?? '',
       completedStepIds: nextCompleted,
+      comments: existing?.comments ?? [],
+      updatedAt: Date.now(),
+    };
+
+    await this.saveLog(updatedLog);
+    return updatedLog;
+  }
+
+  static async bulkUpdateStatus(
+    userId: string,
+    date: string,
+    templateIds: string[],
+    status: ActivityStatus,
+    extra?: Partial<ActivityLog>
+  ): Promise<ActivityLog[]> {
+    const all = this.getLocalLogs(userId);
+    const existingMap = new Map<string, ActivityLog>();
+    all.forEach((l) => existingMap.set(l.id, l));
+
+    const updatedLogs: ActivityLog[] = [];
+    const now = Date.now();
+
+    for (const templateId of templateIds) {
+      const logId = `${date}_${templateId}`;
+      const existing = existingMap.get(logId);
+
+      const updated: ActivityLog = {
+        id: logId,
+        userId,
+        templateId,
+        date,
+        status,
+        actualStartTime: extra?.actualStartTime ?? existing?.actualStartTime,
+        actualEndTime: extra?.actualEndTime ?? existing?.actualEndTime,
+        actualDurationMinutes: extra?.actualDurationMinutes ?? existing?.actualDurationMinutes ?? 0,
+        targetDurationMinutes: extra?.targetDurationMinutes ?? existing?.targetDurationMinutes ?? 0,
+        completionNotes: extra?.completionNotes ?? existing?.completionNotes ?? '',
+        completedStepIds: extra?.completedStepIds ?? existing?.completedStepIds ?? [],
+        comments: existing?.comments ?? [],
+        updatedAt: now,
+      };
+
+      existingMap.set(logId, updated);
+      updatedLogs.push(updated);
+      MutationQueue.enqueue(userId, 'logs', 'set', logId, updated);
+
+      if (canSyncWithFirestore(userId)) {
+        setDoc(doc(db, `users/${userId}/logs`, logId), cleanForFirestore(updated)).catch((err) => {
+          console.warn('Failed to bulk sync log to Firestore:', err);
+        });
+      }
+    }
+
+    const merged = Array.from(existingMap.values());
+    this.saveLocalLogs(userId, merged);
+    SyncEngine.notifyListeners(userId);
+
+    return updatedLogs;
+  }
+
+  static async bulkResetToPending(
+    userId: string,
+    date: string,
+    templateIds: string[]
+  ): Promise<ActivityLog[]> {
+    return this.bulkUpdateStatus(userId, date, templateIds, 'pending', {
+      completionNotes: '',
+    });
+  }
+
+  static async addComment(
+    userId: string,
+    date: string,
+    templateId: string,
+    text: string
+  ): Promise<ActivityLog> {
+    const logId = `${date}_${templateId}`;
+    const all = this.getLocalLogs(userId);
+    const existing = all.find((l) => l.id === logId);
+
+    const newComment: ActivityComment = {
+      id: `comm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      text: text.trim(),
+      createdAt: Date.now(),
+    };
+
+    const currentComments = existing?.comments || [];
+    const updatedComments = [...currentComments, newComment];
+
+    const updatedLog: ActivityLog = {
+      id: logId,
+      userId,
+      templateId,
+      date,
+      status: existing?.status ?? 'pending',
+      actualStartTime: existing?.actualStartTime,
+      actualEndTime: existing?.actualEndTime,
+      actualDurationMinutes: existing?.actualDurationMinutes ?? 0,
+      targetDurationMinutes: existing?.targetDurationMinutes ?? 0,
+      completionNotes: existing?.completionNotes ?? newComment.text,
+      completedStepIds: existing?.completedStepIds ?? [],
+      comments: updatedComments,
+      updatedAt: Date.now(),
+    };
+
+    await this.saveLog(updatedLog);
+    return updatedLog;
+  }
+
+  static async updateComment(
+    userId: string,
+    date: string,
+    templateId: string,
+    commentId: string,
+    text: string
+  ): Promise<ActivityLog> {
+    const logId = `${date}_${templateId}`;
+    const all = this.getLocalLogs(userId);
+    const existing = all.find((l) => l.id === logId);
+
+    const currentComments = existing?.comments || [];
+    const isLegacyNote = commentId.startsWith('log_note_');
+    let completionNotes = existing?.completionNotes ?? '';
+
+    let updatedComments: ActivityComment[];
+    if (isLegacyNote) {
+      completionNotes = text.trim();
+      const found = currentComments.some((c) => c.id === commentId);
+      if (found) {
+        updatedComments = currentComments.map((c) =>
+          c.id === commentId ? { ...c, text: text.trim(), updatedAt: Date.now() } : c
+        );
+      } else {
+        updatedComments = [
+          ...currentComments,
+          { id: commentId, text: text.trim(), createdAt: Date.now(), updatedAt: Date.now() },
+        ];
+      }
+    } else {
+      updatedComments = currentComments.map((c) =>
+        c.id === commentId ? { ...c, text: text.trim(), updatedAt: Date.now() } : c
+      );
+    }
+
+    const updatedLog: ActivityLog = {
+      id: logId,
+      userId,
+      templateId,
+      date,
+      status: existing?.status ?? 'pending',
+      actualStartTime: existing?.actualStartTime,
+      actualEndTime: existing?.actualEndTime,
+      actualDurationMinutes: existing?.actualDurationMinutes ?? 0,
+      targetDurationMinutes: existing?.targetDurationMinutes ?? 0,
+      completionNotes,
+      completedStepIds: existing?.completedStepIds ?? [],
+      comments: updatedComments,
+      updatedAt: Date.now(),
+    };
+
+    await this.saveLog(updatedLog);
+    return updatedLog;
+  }
+
+  static async deleteComment(
+    userId: string,
+    date: string,
+    templateId: string,
+    commentId: string
+  ): Promise<ActivityLog> {
+    const logId = `${date}_${templateId}`;
+    const all = this.getLocalLogs(userId);
+    const existing = all.find((l) => l.id === logId);
+
+    const currentComments = existing?.comments || [];
+    const updatedComments = currentComments.filter((c) => c.id !== commentId);
+    const isLegacyNote = commentId.startsWith('log_note_');
+    const completionNotes = isLegacyNote ? '' : existing?.completionNotes ?? '';
+
+    const updatedLog: ActivityLog = {
+      id: logId,
+      userId,
+      templateId,
+      date,
+      status: existing?.status ?? 'pending',
+      actualStartTime: existing?.actualStartTime,
+      actualEndTime: existing?.actualEndTime,
+      actualDurationMinutes: existing?.actualDurationMinutes ?? 0,
+      targetDurationMinutes: existing?.targetDurationMinutes ?? 0,
+      completionNotes,
+      completedStepIds: existing?.completedStepIds ?? [],
+      comments: updatedComments,
       updatedAt: Date.now(),
     };
 

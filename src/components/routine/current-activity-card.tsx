@@ -22,6 +22,7 @@ import {
   Video,
   ListChecks,
   Check,
+  Palmtree,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 
@@ -36,6 +37,7 @@ interface CurrentActivityCardProps {
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
+  onResumeRoutine?: () => void;
 }
 
 export function CurrentActivityCard({
@@ -45,6 +47,7 @@ export function CurrentActivityCard({
   onPlayMedia,
   onExecuteAi,
   onToggleStep,
+  onResumeRoutine,
 }: CurrentActivityCardProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
 
@@ -87,6 +90,7 @@ export function CurrentActivityCard({
   }
 
   const status = currentOccurrence?.log?.status ?? 'pending';
+  const isAllSkipped = occurrences.length > 0 && occurrences.every((o) => o.log?.status === 'skipped');
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-blue-950/40 p-5 sm:p-6 border border-white/10 shadow-2xl backdrop-blur-xl">
@@ -94,7 +98,45 @@ export function CurrentActivityCard({
       <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      {currentOccurrence ? (
+      {isAllSkipped ? (
+        <div className="relative z-10 py-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Palmtree className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                Day Off • Routine Skipped
+              </span>
+            </div>
+            <span className="text-xs text-slate-400">
+              {formatTime12Hour(currentTime)} IST
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                <span>Enjoy your day off!</span>
+                <span className="text-lg">🌴</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                All {occurrences.length} scheduled routines for today are skipped. Take this time to rest and recharge.
+              </p>
+            </div>
+
+            {onResumeRoutine && (
+              <button
+                type="button"
+                id="btn-card-resume-routine"
+                onClick={onResumeRoutine}
+                className="self-start sm:self-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-amber-600/25 transition active:scale-95 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Resume Routine</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : currentOccurrence ? (
         <div className="relative z-10 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">

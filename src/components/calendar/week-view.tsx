@@ -196,9 +196,13 @@ export function WeekView({
               <div className="py-2 text-[11px] text-slate-400 flex items-center justify-between">
                 <span>{formatDuration(totalScheduledMinutes)}</span>
                 {dayOccurrences.length > 0 && (
-                  <span className="text-emerald-400 font-medium">
-                    {completedCount}/{dayOccurrences.length} done
-                  </span>
+                  dayOccurrences.every((o) => o.log?.status === 'skipped') ? (
+                    <span className="text-amber-400 font-medium">🌴 Day Off</span>
+                  ) : (
+                    <span className="text-emerald-400 font-medium">
+                      {completedCount}/{dayOccurrences.length} done
+                    </span>
+                  )
                 )}
               </div>
 
@@ -206,6 +210,7 @@ export function WeekView({
               <div className="space-y-1.5 grow max-h-72 overflow-y-auto pr-0.5">
                 {dayOccurrences.slice(0, 6).map((occ) => {
                   const isCompleted = occ.log?.status === 'completed';
+                  const isSkipped = occ.log?.status === 'skipped';
                   return (
                     <div
                       key={occ.occurrenceId}
@@ -216,6 +221,8 @@ export function WeekView({
                       className={`min-h-[36px] p-2 rounded-xl border text-[11px] transition hover:scale-[1.01] active:scale-95 flex items-center justify-between gap-1.5 ${
                         isCompleted
                           ? 'bg-slate-800/40 border-white/5 opacity-60 text-slate-400 line-through'
+                          : isSkipped
+                          ? 'bg-rose-950/30 border-rose-500/20 opacity-70 text-rose-300 line-through'
                           : 'bg-slate-800/80 border-white/5 text-slate-200'
                       }`}
                       style={{ borderLeftColor: occ.color, borderLeftWidth: '3px' }}

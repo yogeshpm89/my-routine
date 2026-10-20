@@ -18,13 +18,14 @@ import {
   WifiOff,
   ChevronRight,
   ShieldCheck,
+  Target,
 } from 'lucide-react';
 
 interface MobileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: 'today' | 'week' | 'month' | 'ai' | 'analytics' | 'settings';
-  onSelectTab: (tab: 'today' | 'week' | 'month' | 'ai' | 'analytics' | 'settings') => void;
+  activeTab: 'today' | 'week' | 'month' | 'goals' | 'ai' | 'analytics' | 'settings';
+  onSelectTab: (tab: 'today' | 'week' | 'month' | 'goals' | 'ai' | 'analytics' | 'settings') => void;
   onOpenCreate: () => void;
   onSyncNow?: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
@@ -93,9 +94,16 @@ export function MobileDrawer({
       color: 'text-purple-400 bg-purple-500/10',
     },
     {
+      id: 'goals' as const,
+      label: 'Life Goals',
+      subtitle: 'Personal & professional milestone targets',
+      icon: Target,
+      color: 'text-indigo-400 bg-indigo-500/10',
+    },
+    {
       id: 'analytics' as const,
-      label: 'Analytics & Goals',
-      subtitle: 'Completion rates & time targets',
+      label: 'Analytics & Time Targets',
+      subtitle: 'Completion rates & routine analytics',
       icon: BarChart3,
       color: 'text-amber-400 bg-amber-500/10',
     },

@@ -186,24 +186,40 @@ export function MonthView({
                   <div className="space-y-0.5 sm:space-y-1 mt-1">
                     {/* Compact indicator on mobile */}
                     <div className="flex sm:hidden items-center gap-1 flex-wrap">
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800/80 text-slate-300 font-semibold">
-                        {dayOccurrences.length}
-                      </span>
-                      {completed > 0 && (
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 font-bold">
-                          {completed}✓
+                      {dayOccurrences.every((o) => o.log?.status === 'skipped') ? (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-950/80 text-amber-300 font-bold">
+                          🌴 Off
                         </span>
+                      ) : (
+                        <>
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800/80 text-slate-300 font-semibold">
+                            {dayOccurrences.length}
+                          </span>
+                          {completed > 0 && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 font-bold">
+                              {completed}✓
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
 
                     {/* Detailed text on tablet / desktop */}
-                    <div className="hidden sm:block text-[10px] text-slate-400">
-                      {dayOccurrences.length} activities
-                    </div>
-                    {completed > 0 && (
-                      <div className="hidden sm:block text-[10px] text-emerald-400 font-medium">
-                        {completed} completed
+                    {dayOccurrences.every((o) => o.log?.status === 'skipped') ? (
+                      <div className="hidden sm:block text-[10px] text-amber-300 font-medium">
+                        🌴 Day Off (Skipped)
                       </div>
+                    ) : (
+                      <>
+                        <div className="hidden sm:block text-[10px] text-slate-400">
+                          {dayOccurrences.length} activities
+                        </div>
+                        {completed > 0 && (
+                          <div className="hidden sm:block text-[10px] text-emerald-400 font-medium">
+                            {completed} completed
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
