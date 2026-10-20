@@ -47,6 +47,7 @@ import { SkipCompleteRoutineModal } from '@/components/routine/skip-complete-rou
 import { LifeGoal, GoalTrackedItem, GoalExperienceEntry } from '@/types/goals';
 import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import { GoalsDashboard } from '@/components/goals/goals-dashboard';
+import { syncOccurrencesToWidget } from '@/lib/widget/routine-widget';
 import {
   Clock,
   CalendarDays,
@@ -726,6 +727,18 @@ export default function RoutineApp() {
   const dayOfWeek = getDayOfWeek(selectedDate);
   const conflicts = detectScheduleConflicts(occurrences, goals, dayOfWeek);
   const dayInfo = HolidayService.getDayTypeInfo(userId, selectedDate);
+
+  // Sync current routine metrics to Android Home Screen Widget
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const todayStr = getTodayDateString('Asia/Kolkata');
+    const todayOccurrences =
+      selectedDate === todayStr
+        ? occurrences
+        : generateDailyOccurrences(templates, overrides, logs, todayStr);
+
+    syncOccurrencesToWidget(todayOccurrences);
+  }, [occurrences, selectedDate, templates, overrides, logs]);
 
   // Skip complete routine handler
   const handleSkipCompleteRoutine = async (
