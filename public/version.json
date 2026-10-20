@@ -14,7 +14,7 @@
     "Priority Triage: Filter and organize goals across P0 Critical to P3 Low priorities",
     "Seamless Cloud Sync: Instant Firestore synchronization and offline-first persistence"
   ],
-  "apkUrl": "https://my-routine-app-3f631.web.app/download/my-routine-release.apk",
+  "apkUrl": "https://github.com/yogeshpm89/my-routine/releases/latest/download/my-routine-release.apk",
   "fileSizeBytes": 5242880,
   "isCritical": false
 }

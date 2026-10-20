@@ -1,4 +1,4 @@
-name: Build & Deploy Android APK to Firebase
+name: Build & Deploy Android APK
 
 on:
   push:
@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-deploy:
-    name: Build APK & Deploy to Firebase Hosting
+    name: Build APK & Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -53,25 +53,25 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x android/gradlew
 
-      - name: Build Android Release APK
+      - name: Build Android Release & Debug APKs
         working-directory: ./android
         run: |
           ./gradlew assembleRelease assembleDebug --stacktrace
 
-      - name: Stage APK for Firebase Hosting In-App Updates
+      - name: Stage APK for Release Distribution
         run: |
-          mkdir -p out/download
-          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
-            cp android/app/build/outputs/apk/release/app-release.apk out/download/my-routine-release.apk
-            echo "Staged app-release.apk -> out/download/my-routine-release.apk"
+          mkdir -p release-apks
+          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk release-apks/my-routine-release.apk
+          elif [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk release-apks/my-routine-release.apk
           elif [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk out/download/my-routine-release.apk
-            echo "Staged app-debug.apk -> out/download/my-routine-release.apk"
+            cp android/app/build/outputs/apk/debug/app-debug.apk release-apks/my-routine-release.apk
           fi
 
           # Update exact file size in out/version.json for accurate in-app modal display
-          if [ -f out/download/my-routine-release.apk ]; then
-            APK_SIZE=$(stat -c%s out/download/my-routine-release.apk 2>/dev/null || stat -f%z out/download/my-routine-release.apk || echo 0)
+          if [ -f release-apks/my-routine-release.apk ]; then
+            APK_SIZE=$(stat -c%s release-apks/my-routine-release.apk 2>/dev/null || stat -f%z release-apks/my-routine-release.apk || echo 0)
             echo "Generated APK size: $APK_SIZE bytes"
             node -e "
               const fs = require('fs');
@@ -89,16 +89,33 @@ jobs:
         with:
           name: my-routine-android-apk
           path: |
+            release-apks/my-routine-release.apk
             android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Deploy APK & Web App to Firebase Hosting
+      - name: Publish APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: latest
+          name: "My Routine Latest Release (v1.2.0)"
+          body: "Official Android APK release for My Routine. Download and tap to install on your phone."
+          files: release-apks/my-routine-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy Web App & Version Manifest to Firebase Hosting
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MY_ROUTINE_APP_3F631 || secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
+          # Firebase Spark plan strictly forbids .apk binaries on Hosting.
+          # Ensure out/ only contains web assets (HTML, CSS, JS, version.json).
+          rm -rf out/download/*.apk || true
+          find out -name "*.apk" -delete || true
+
           if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
             echo "Deploying via Firebase Service Account..."
             echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
@@ -108,5 +125,5 @@ jobs:
             echo "Deploying via FIREBASE_TOKEN..."
             npx -y firebase-tools@latest deploy --only hosting --project my-routine-app-3f631 --token "$FIREBASE_TOKEN"
           else
-            echo "::warning title=Firebase Secret Not Configured::Neither FIREBASE_SERVICE_ACCOUNT_MY_ROUTINE_APP_3F631 nor FIREBASE_TOKEN was found in GitHub Secrets. The APK build succeeded and is available in GitHub Artifacts. To enable automatic hosting upload, add either secret in GitHub Repo Settings -> Secrets and variables -> Actions."
+            echo "::warning title=Firebase Secret Not Configured::Neither FIREBASE_SERVICE_ACCOUNT nor FIREBASE_TOKEN found."
           fi
