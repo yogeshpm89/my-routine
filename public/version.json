@@ -1,17 +1,20 @@
 {
-  "version": "1.1.0",
-  "versionCode": 2,
+  "version": "1.2.0",
+  "versionCode": 3,
   "minSupportedVersion": "1.0.0",
-  "releaseDate": "2026-10-19",
-  "title": "v1.1.0 — Realtime Cloud Sync & Task Steps",
+  "releaseDate": "2026-10-20",
+  "title": "v1.2.0 — Universal Goal Engine & Reflection Journal",
   "changelog": [
-    "Task Steps & Checklists: Interactive checklist for routines with 1-tap progress",
-    "Real-time Cloud Sync: Instant Firestore sync for start, skip, and completions",
-    "Seamless Offline-to-Cloud merge with zero lost updates",
-    "In-App Updates: Direct 1-tap APK update check and installation",
-    "Enhanced mobile navigation dock with quick unskip capability"
+    "Universal Goal Engine: Set any personal or professional aspiration with arbitrary categories and flexible tracking modes",
+    "Multi-Stage Roadmap Phases: Break ambitious goals into structured milestones, targets, and phase checklists",
+    "Custom Lists & Resource Vault: Maintain tailored reading lists, action items, research links, and local references",
+    "Experience & Reflection Journal: Log milestones, lessons, mood ratings, and personal breakthroughs",
+    "Weekend & Holiday Routine Skip: Option to pause full daily routine on holidays or weekends with 1 tap",
+    "Activity Comments & Notes: Add notes, reflections, and thoughts to any daily routine activity",
+    "Priority Triage: Filter and organize goals across P0 Critical to P3 Low priorities",
+    "Seamless Cloud Sync: Instant Firestore synchronization and offline-first persistence"
   ],
   "apkUrl": "https://my-routine-app-3f631.web.app/download/my-routine-release.apk",
-  "fileSizeBytes": 5120000,
+  "fileSizeBytes": 5242880,
   "isCritical": false
 }
