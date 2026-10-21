@@ -47,6 +47,7 @@ export const MediaAttachmentTypeSchema = z.enum([
   'audio_url',
   'video_url',
   'local_file',
+  'music_service',
 ]);
 export type MediaAttachmentType = z.infer<typeof MediaAttachmentTypeSchema>;
 

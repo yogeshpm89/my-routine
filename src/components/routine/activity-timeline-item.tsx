@@ -24,8 +24,11 @@ import {
   Send,
   X,
   FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
+import { MusicServiceIcon } from '@/components/media/music-service-icons';
+import { getMusicServiceInfo, openExternalMusicApp } from '@/lib/media/media-storage';
 import { cn } from '@/lib/utils';
 import { getActivityTheme } from '@/lib/activity-styles';
 import { VoiceInputButton } from './voice-input-button';
@@ -298,30 +301,52 @@ export function ActivityTimelineItem({
               {/* Attached Media Chips */}
               {occurrence.media && occurrence.media.length > 0 && (
                 <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                  {occurrence.media.map((item, idx) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPlayMedia?.(occurrence, idx);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-white/10 shadow-sm transition active:scale-95 cursor-pointer"
-                      title={`Play ${item.title || item.fileName || 'media'}`}
-                    >
-                      {item.type === 'youtube' ? (
-                        <Youtube className="w-3 h-3 text-rose-500" />
-                      ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
-                        <Music className="w-3 h-3 text-emerald-400" />
-                      ) : (
-                        <Video className="w-3 h-3 text-blue-400" />
-                      )}
-                      <span className="truncate max-w-[120px]">
-                        {item.title || item.fileName || 'Play'}
-                      </span>
-                      <Play className="w-2.5 h-2.5 fill-current opacity-70 ml-0.5" />
-                    </button>
-                  ))}
+                  {occurrence.media.map((item, idx) => {
+                    const musicInfo = getMusicServiceInfo(item.url || '');
+                    const isMusic = item.type === 'music_service' || musicInfo.isMusicService;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isMusic && item.url) {
+                            openExternalMusicApp(item.url);
+                          } else {
+                            onPlayMedia?.(occurrence, idx);
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border shadow-sm transition active:scale-95 cursor-pointer ${
+                          isMusic
+                            ? `${musicInfo.badgeBg} hover:bg-slate-700/90`
+                            : 'bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border-white/10'
+                        }`}
+                        title={
+                          isMusic
+                            ? `Open in ${musicInfo.serviceName} app`
+                            : `Play ${item.title || item.fileName || 'media'}`
+                        }
+                      >
+                        {isMusic ? (
+                          <MusicServiceIcon service={musicInfo.service} className="w-3 h-3" />
+                        ) : item.type === 'youtube' ? (
+                          <Youtube className="w-3 h-3 text-rose-500" />
+                        ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
+                          <Music className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <Video className="w-3 h-3 text-blue-400" />
+                        )}
+                        <span className="truncate max-w-[120px]">
+                          {item.title || (isMusic ? `${musicInfo.serviceName} Playlist` : item.fileName || 'Play')}
+                        </span>
+                        {isMusic ? (
+                          <ExternalLink className="w-2.5 h-2.5 opacity-80 ml-0.5" />
+                        ) : (
+                          <Play className="w-2.5 h-2.5 fill-current opacity-70 ml-0.5" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

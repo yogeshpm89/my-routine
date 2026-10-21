@@ -17,8 +17,11 @@ import {
   deleteLocalMediaBlob,
   detectMediaType,
   formatFileSize,
+  getMusicServiceInfo,
+  openExternalMusicApp,
 } from '@/lib/media/media-storage';
 import { MediaPlayerModal } from '@/components/media/media-player-modal';
+import { MusicServiceIcon } from '@/components/media/music-service-icons';
 import {
   X,
   Lock,
@@ -39,6 +42,7 @@ import {
   ArrowUp,
   ArrowDown,
   Check,
+  ExternalLink,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { AiActionConfig } from '@/types/ai';
@@ -181,13 +185,17 @@ export function ActivityEditorDialog({
     const trimmedUrl = urlInput.trim();
     if (!trimmedUrl) return;
 
+    const musicInfo = getMusicServiceInfo(trimmedUrl);
     const detectedType = detectMediaType(trimmedUrl);
-    const fallbackTitle =
-      detectedType === 'youtube'
-        ? 'YouTube Video'
-        : detectedType === 'audio_url'
-        ? 'Audio Stream'
-        : 'Video Stream';
+
+    let fallbackTitle = 'Video Stream';
+    if (musicInfo.isMusicService) {
+      fallbackTitle = `${musicInfo.serviceName} ${musicInfo.isPlaylist ? 'Playlist' : 'Music'}`;
+    } else if (detectedType === 'youtube') {
+      fallbackTitle = 'YouTube Video';
+    } else if (detectedType === 'audio_url') {
+      fallbackTitle = 'Audio Stream';
+    }
 
     const newAttachment: MediaAttachment = {
       id: `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -625,58 +633,76 @@ export function ActivityEditorDialog({
               {/* List of attachments */}
               {media.length > 0 ? (
                 <div className="space-y-2">
-                  {media.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-white/5 text-xs"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="p-1.5 rounded-lg bg-slate-800 shrink-0">
-                          {item.type === 'youtube' ? (
-                            <Youtube className="w-4 h-4 text-rose-500" />
-                          ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
-                            <Music className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Video className="w-4 h-4 text-blue-400" />
-                          )}
+                  {media.map((item, idx) => {
+                    const musicInfo = getMusicServiceInfo(item.url || '');
+                    const isMusic = item.type === 'music_service' || musicInfo.isMusicService;
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-white/5 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-1.5 rounded-lg bg-slate-800 shrink-0">
+                            {isMusic ? (
+                              <MusicServiceIcon service={musicInfo.service} className="w-4 h-4" />
+                            ) : item.type === 'youtube' ? (
+                              <Youtube className="w-4 h-4 text-rose-500" />
+                            ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
+                              <Music className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <Video className="w-4 h-4 text-blue-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-200 truncate">
+                              {item.title || item.fileName || 'Media Item'}
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {isMusic
+                                ? `${musicInfo.serviceName} ${musicInfo.isPlaylist ? 'Playlist' : 'Music'} (Opens in app)`
+                                : item.type === 'youtube'
+                                ? 'YouTube Video'
+                                : item.type === 'local_file'
+                                ? `Downloaded File (${formatFileSize(item.fileSize)})`
+                                : item.type === 'audio_url'
+                                ? 'Audio Link'
+                                : 'Video Link'}
+                              {item.url && ` • ${item.url}`}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-200 truncate">
-                            {item.title || item.fileName || 'Media Item'}
-                          </p>
-                          <p className="text-[10px] text-slate-400 truncate">
-                            {item.type === 'youtube'
-                              ? 'YouTube Video'
-                              : item.type === 'local_file'
-                              ? `Downloaded File (${formatFileSize(item.fileSize)})`
-                              : item.type === 'audio_url'
-                              ? 'Audio Link'
-                              : 'Video Link'}
-                            {item.url && ` • ${item.url}`}
-                          </p>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handlePreviewMedia(idx)}
-                          title="Preview / Play Media"
-                          className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-950/60 transition"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMedia(item)}
-                          title="Remove Media"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isMusic && item.url) {
+                                openExternalMusicApp(item.url);
+                              } else {
+                                handlePreviewMedia(idx);
+                              }
+                            }}
+                            title={isMusic ? `Open in ${musicInfo.serviceName} app` : 'Preview / Play Media'}
+                            className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-950/60 transition cursor-pointer"
+                          >
+                            {isMusic ? (
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMedia(item)}
+                            title="Remove Media"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-[11px] text-slate-400 italic">No media or links added to this routine yet.</p>

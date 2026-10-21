@@ -29,8 +29,11 @@ import {
   Trash2,
   ChevronDown,
   Gauge,
+  ExternalLink,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
+import { MusicServiceIcon } from '@/components/media/music-service-icons';
+import { getMusicServiceInfo, openExternalMusicApp } from '@/lib/media/media-storage';
 import { getActivityTheme } from '@/lib/activity-styles';
 import { VoiceInputButton } from './voice-input-button';
 import { cn } from '@/lib/utils';
@@ -258,43 +261,97 @@ export function CurrentActivityCard({
               {/* Attached Media Chips */}
               {currentOccurrence.media && currentOccurrence.media.length > 0 && (
                 <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                  {currentOccurrence.media.map((item, idx) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onPlayMedia?.(currentOccurrence, idx)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-white/10 shadow-sm transition hover:scale-[1.02]"
-                      title={`Play ${item.title || item.fileName || 'media'}`}
-                    >
-                      {item.type === 'youtube' ? (
-                        <Youtube className="w-3.5 h-3.5 text-rose-500" />
-                      ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
-                        <Music className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <Video className="w-3.5 h-3.5 text-blue-400" />
-                      )}
-                      <span className="truncate max-w-[150px]">{item.title || item.fileName || 'Media Track'}</span>
-                      <Play className="w-2.5 h-2.5 fill-current opacity-75" />
-                    </button>
-                  ))}
+                  {currentOccurrence.media.map((item, idx) => {
+                    const musicInfo = getMusicServiceInfo(item.url || '');
+                    const isMusic = item.type === 'music_service' || musicInfo.isMusicService;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (isMusic && item.url) {
+                            openExternalMusicApp(item.url);
+                          } else {
+                            onPlayMedia?.(currentOccurrence, idx);
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border shadow-sm transition hover:scale-[1.02] cursor-pointer ${
+                          isMusic
+                            ? `${musicInfo.badgeBg} hover:bg-slate-700/80`
+                            : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-white/10'
+                        }`}
+                        title={
+                          isMusic
+                            ? `Open in ${musicInfo.serviceName} app`
+                            : `Play ${item.title || item.fileName || 'media'}`
+                        }
+                      >
+                        {isMusic ? (
+                          <MusicServiceIcon service={musicInfo.service} className="w-3.5 h-3.5" />
+                        ) : item.type === 'youtube' ? (
+                          <Youtube className="w-3.5 h-3.5 text-rose-500" />
+                        ) : item.type === 'audio_url' || (item.type === 'local_file' && item.mimeType?.startsWith('audio/')) ? (
+                          <Music className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Video className="w-3.5 h-3.5 text-blue-400" />
+                        )}
+                        <span className="truncate max-w-[150px]">
+                          {item.title || (isMusic ? `${musicInfo.serviceName} Playlist` : item.fileName || 'Media Track')}
+                        </span>
+                        {isMusic ? (
+                          <ExternalLink className="w-2.5 h-2.5 opacity-80" />
+                        ) : (
+                          <Play className="w-2.5 h-2.5 fill-current opacity-75" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
             {/* Quick Status Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
-              {currentOccurrence.media && currentOccurrence.media.length > 0 && (
-                <button
-                  id="btn-play-current-media"
-                  type="button"
-                  onClick={() => onPlayMedia?.(currentOccurrence, 0)}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] text-xs sm:text-sm font-semibold rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white shadow-lg shadow-rose-900/30 transition-all active:scale-[0.98]"
-                  title="Play Routine Media"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Play Media ({currentOccurrence.media.length})</span>
-                </button>
-              )}
+              {currentOccurrence.media && currentOccurrence.media.length > 0 && (() => {
+                const allMusic = currentOccurrence.media.every((m) => {
+                  const mi = getMusicServiceInfo(m.url || '');
+                  return m.type === 'music_service' || mi.isMusicService;
+                });
+                const firstMusic = getMusicServiceInfo(currentOccurrence.media[0].url || '');
+
+                if (allMusic && currentOccurrence.media.length === 1 && currentOccurrence.media[0].url) {
+                  return (
+                    <button
+                      id="btn-play-current-media"
+                      type="button"
+                      onClick={() => openExternalMusicApp(currentOccurrence.media![0].url)}
+                      className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 min-h-[44px] text-xs sm:text-sm font-semibold rounded-xl text-white shadow-lg transition-all active:scale-[0.98] cursor-pointer"
+                      style={{
+                        background: `linear-gradient(135deg, ${firstMusic.color || '#1DB954'}, #1e1b4b)`,
+                        boxShadow: `0 4px 14px ${firstMusic.color || '#1DB954'}40`,
+                      }}
+                      title={`Open in ${firstMusic.serviceName}`}
+                    >
+                      <MusicServiceIcon service={firstMusic.service} className="w-4 h-4 text-white" />
+                      <span>Open in {firstMusic.serviceName}</span>
+                      <ExternalLink className="w-3 h-3 opacity-80" />
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    id="btn-play-current-media"
+                    type="button"
+                    onClick={() => onPlayMedia?.(currentOccurrence, 0)}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[44px] text-xs sm:text-sm font-semibold rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white shadow-lg shadow-rose-900/30 transition-all active:scale-[0.98] cursor-pointer"
+                    title="Play Routine Media"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Play Media ({currentOccurrence.media.length})</span>
+                  </button>
+                );
+              })()}
               {status !== 'completed' ? (
                 <>
                   {status !== 'in_progress' ? (
