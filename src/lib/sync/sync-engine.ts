@@ -2,6 +2,7 @@ import { db, isFirebaseConfigured, canSyncWithFirestore, cleanForFirestore } fro
 import { MutationQueue, SyncMutation } from './mutation-queue';
 import { RoutineRepository } from '@/lib/repositories/routine-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
+import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import {
   doc,
   getDoc,
@@ -140,6 +141,7 @@ export class SyncEngine {
     success: boolean;
     templatesCount: number;
     goalsCount: number;
+    lifeGoalsCount: number;
     message: string;
   }> {
     if (!canSyncWithFirestore(userId)) {
@@ -147,6 +149,7 @@ export class SyncEngine {
         success: false,
         templatesCount: 0,
         goalsCount: 0,
+        lifeGoalsCount: 0,
         message: 'Please sign in to your account with Google or Email to sync data to the cloud.',
       };
     }
@@ -154,6 +157,7 @@ export class SyncEngine {
     try {
       const templates = RoutineRepository.getLocalTemplates(userId);
       const goals = GoalRepository.getLocalGoals(userId);
+      const lifeGoals = LifeGoalRepository.getLocalLifeGoals(userId);
 
       for (const t of templates) {
         await setDoc(doc(db, `users/${userId}/templates`, t.id), cleanForFirestore(t));
@@ -163,11 +167,16 @@ export class SyncEngine {
         await setDoc(doc(db, `users/${userId}/goals`, g.id), cleanForFirestore(g));
       }
 
+      for (const lg of lifeGoals) {
+        await setDoc(doc(db, `users/${userId}/life_goals`, lg.id), cleanForFirestore(lg));
+      }
+
       return {
         success: true,
         templatesCount: templates.length,
         goalsCount: goals.length,
-        message: `Successfully uploaded ${templates.length} routine templates and ${goals.length} goals to Firestore (/users/${userId}/*)!`,
+        lifeGoalsCount: lifeGoals.length,
+        message: `Successfully uploaded ${templates.length} routine templates, ${goals.length} target goals, and ${lifeGoals.length} life goals to Firestore (/users/${userId}/*)!`,
       };
     } catch (err: any) {
       console.error('Failed to push data to Firestore:', err);
@@ -175,6 +184,7 @@ export class SyncEngine {
         success: false,
         templatesCount: 0,
         goalsCount: 0,
+        lifeGoalsCount: 0,
         message: `Upload failed: ${err?.message || 'Check firestore.rules and API credentials.'}`,
       };
     }

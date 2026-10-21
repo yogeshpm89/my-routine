@@ -18,6 +18,7 @@ import {
   X,
   Target,
   ArrowRight,
+  ChevronDown,
 } from 'lucide-react';
 import { LifeGoal } from '@/types/goals';
 import {
@@ -82,6 +83,7 @@ export function TodayTimeline({
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'skipped'>('all');
   const [dismissedSuggestionDate, setDismissedSuggestionDate] = useState<string | null>(null);
+  const [isCompletedCollapsed, setIsCompletedCollapsed] = useState<boolean>(true);
 
   useEffect(() => {
     setCurrentTime(getCurrentTimeString('Asia/Kolkata'));
@@ -480,33 +482,150 @@ export function TodayTimeline({
 
       {/* Timeline Stream */}
       {filteredOccurrences.length > 0 ? (
-        <div className="space-y-1">
-          {filteredOccurrences.map((occurrence) => {
-            const startM = timeToMinutes(occurrence.startTime);
-            const endM = timeToMinutes(occurrence.endTime);
-            const isCurrent =
-              endM >= startM
-                ? currentMinutes >= startM && currentMinutes < endM
-                : currentMinutes >= startM || currentMinutes < endM;
+        <div className="space-y-2">
+          {taskFilter === 'all' && completedCount > 0 && pendingCount + skippedCount > 0 ? (
+            <>
+              {/* Active & Pending Activities Stream */}
+              <div className="space-y-1">
+                {occurrences
+                  .filter((occ) => occ.log?.status !== 'completed')
+                  .map((occurrence) => {
+                    const startM = timeToMinutes(occurrence.startTime);
+                    const endM = timeToMinutes(occurrence.endTime);
+                    const isCurrent =
+                      endM >= startM
+                        ? currentMinutes >= startM && currentMinutes < endM
+                        : currentMinutes >= startM || currentMinutes < endM;
 
-            return (
-              <ActivityTimelineItem
-                key={occurrence.occurrenceId}
-                occurrence={occurrence}
-                isCurrent={isCurrent}
-                onUpdateStatus={onUpdateStatus}
-                onEdit={onEdit}
-                onDuplicate={onDuplicate}
-                onDelete={onDelete}
-                onPlayMedia={onPlayMedia}
-                onExecuteAi={onExecuteAi}
-                onToggleStep={onToggleStep}
-                onAddComment={onAddComment}
-                onUpdateComment={onUpdateComment}
-                onDeleteComment={onDeleteComment}
-              />
-            );
-          })}
+                    return (
+                      <ActivityTimelineItem
+                        key={occurrence.occurrenceId}
+                        occurrence={occurrence}
+                        isCurrent={isCurrent}
+                        onUpdateStatus={onUpdateStatus}
+                        onEdit={onEdit}
+                        onDuplicate={onDuplicate}
+                        onDelete={onDelete}
+                        onPlayMedia={onPlayMedia}
+                        onExecuteAi={onExecuteAi}
+                        onToggleStep={onToggleStep}
+                        onAddComment={onAddComment}
+                        onUpdateComment={onUpdateComment}
+                        onDeleteComment={onDeleteComment}
+                      />
+                    );
+                  })}
+              </div>
+
+              {/* Collapsible Completed Activities Section */}
+              <div className="pt-2">
+                <div className="rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur-md overflow-hidden transition-all duration-200 shadow-md">
+                  <button
+                    type="button"
+                    id="btn-toggle-completed-activities"
+                    onClick={() => setIsCompletedCollapsed(!isCompletedCollapsed)}
+                    className="w-full flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/5 transition-colors cursor-pointer text-left select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-bold text-white">
+                            Completed Activities
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                            {completedCount} of {totalCount} done
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {isCompletedCollapsed
+                            ? 'Collapsed to save vertical screen space • Tap to view'
+                            : 'Tap to collapse completed activities'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-blue-400 font-semibold hidden sm:inline">
+                        {isCompletedCollapsed ? 'Expand' : 'Collapse'}
+                      </span>
+                      <div
+                        className={`p-1.5 rounded-lg bg-slate-800 text-slate-400 transition-transform duration-200 ${
+                          !isCompletedCollapsed ? 'rotate-180' : ''
+                        }`}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </button>
+
+                  {!isCompletedCollapsed && (
+                    <div className="p-2 sm:p-3 border-t border-white/5 space-y-1 animate-in fade-in duration-200">
+                      {occurrences
+                        .filter((occ) => occ.log?.status === 'completed')
+                        .map((occurrence) => {
+                          const startM = timeToMinutes(occurrence.startTime);
+                          const endM = timeToMinutes(occurrence.endTime);
+                          const isCurrent =
+                            endM >= startM
+                              ? currentMinutes >= startM && currentMinutes < endM
+                              : currentMinutes >= startM || currentMinutes < endM;
+
+                          return (
+                            <ActivityTimelineItem
+                              key={occurrence.occurrenceId}
+                              occurrence={occurrence}
+                              isCurrent={isCurrent}
+                              onUpdateStatus={onUpdateStatus}
+                              onEdit={onEdit}
+                              onDuplicate={onDuplicate}
+                              onDelete={onDelete}
+                              onPlayMedia={onPlayMedia}
+                              onExecuteAi={onExecuteAi}
+                              onToggleStep={onToggleStep}
+                              onAddComment={onAddComment}
+                              onUpdateComment={onUpdateComment}
+                              onDeleteComment={onDeleteComment}
+                            />
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1">
+              {filteredOccurrences.map((occurrence) => {
+                const startM = timeToMinutes(occurrence.startTime);
+                const endM = timeToMinutes(occurrence.endTime);
+                const isCurrent =
+                  endM >= startM
+                    ? currentMinutes >= startM && currentMinutes < endM
+                    : currentMinutes >= startM || currentMinutes < endM;
+
+                return (
+                  <ActivityTimelineItem
+                    key={occurrence.occurrenceId}
+                    occurrence={occurrence}
+                    isCurrent={isCurrent}
+                    onUpdateStatus={onUpdateStatus}
+                    onEdit={onEdit}
+                    onDuplicate={onDuplicate}
+                    onDelete={onDelete}
+                    onPlayMedia={onPlayMedia}
+                    onExecuteAi={onExecuteAi}
+                    onToggleStep={onToggleStep}
+                    onAddComment={onAddComment}
+                    onUpdateComment={onUpdateComment}
+                    onDeleteComment={onDeleteComment}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : occurrences.length > 0 ? (
         <div className="text-center py-12 px-4 rounded-2xl bg-slate-900/30 border border-slate-800 space-y-2">

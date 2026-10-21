@@ -77,10 +77,15 @@ export class UpdateManager {
    * Fetch the latest version manifest from Firebase Hosting.
    */
   static async fetchLatestManifest(): Promise<AppUpdateManifest | null> {
-    const manifestUrl =
-      typeof window !== 'undefined' && window.location.origin.includes('my-routine-app-3f631')
-        ? `/version.json?t=${Date.now()}`
-        : `${REMOTE_MANIFEST_URL}?t=${Date.now()}`;
+    const isLocalOrHosting =
+      typeof window !== 'undefined' &&
+      (window.location.origin.includes('my-routine-app-3f631') ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1');
+
+    const manifestUrl = isLocalOrHosting
+      ? `/version.json?t=${Date.now()}`
+      : `${REMOTE_MANIFEST_URL}?t=${Date.now()}`;
 
     try {
       const res = await fetch(manifestUrl, {

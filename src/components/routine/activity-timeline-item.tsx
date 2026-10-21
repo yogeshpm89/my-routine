@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { cn } from '@/lib/utils';
+import { getActivityTheme } from '@/lib/activity-styles';
+import { VoiceInputButton } from './voice-input-button';
 
 interface ActivityTimelineItemProps {
   occurrence: ActivityOccurrence;
@@ -136,6 +138,7 @@ export function ActivityTimelineItem({
   };
 
   const currentStyle = statusStyles[status];
+  const theme = getActivityTheme(occurrence.category);
 
   // Quick 1-tap completion toggle for mobile
   const handleToggleCompletion = () => {
@@ -175,7 +178,7 @@ export function ActivityTimelineItem({
           className={cn(
             'w-4 h-4 rounded-full border-2 border-slate-950 z-10 transition-transform group-hover:scale-125 shadow-md',
             currentStyle.nodeBg,
-            isCurrent && 'ring-4 ring-blue-500/30'
+            isCurrent && cn('ring-4', theme.timelineCurrentRing)
           )}
         />
         <div className="w-0.5 grow bg-slate-800 my-1 group-last:hidden" />
@@ -188,7 +191,7 @@ export function ActivityTimelineItem({
           'w-full grow rounded-2xl p-3 sm:p-4 transition-all duration-200 border shadow-md backdrop-blur-md',
           currentStyle.border,
           isCurrent
-            ? 'bg-slate-900/95 ring-1 ring-blue-500/40 shadow-blue-900/20'
+            ? cn('bg-gradient-to-br', theme.cardGradient, theme.borderColor, 'shadow-lg ring-1', theme.timelineCurrentRing)
             : 'bg-slate-900/60 hover:bg-slate-900/90 hover:border-white/20'
         )}
       >
@@ -599,25 +602,34 @@ export function ActivityTimelineItem({
                               className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-blue-500/50 text-xs text-white focus:outline-none"
                               placeholder="Edit comment..."
                             />
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setEditingCommentId(null)}
-                                className="px-2.5 py-1 rounded text-[11px] text-slate-400 hover:text-white"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (!editingText.trim()) return;
-                                  await onUpdateComment?.(occurrence, comment.id, editingText);
-                                  setEditingCommentId(null);
-                                }}
-                                className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold"
-                              >
-                                Save
-                              </button>
+                            <div className="flex items-center justify-between gap-2">
+                              <VoiceInputButton
+                                onTranscript={(txt) =>
+                                  setEditingText((prev) => (prev ? `${prev} ${txt}` : txt))
+                                }
+                                size="sm"
+                                title="Voice dictation for note"
+                              />
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCommentId(null)}
+                                  className="px-2.5 py-1 rounded text-[11px] text-slate-400 hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!editingText.trim()) return;
+                                    await onUpdateComment?.(occurrence, comment.id, editingText);
+                                    setEditingCommentId(null);
+                                  }}
+                                  className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold cursor-pointer"
+                                >
+                                  Save
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -667,23 +679,34 @@ export function ActivityTimelineItem({
               {/* Add Comment Input Form */}
               <div className="pt-1">
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <textarea
-                    value={newCommentText}
-                    onChange={(e) => setNewCommentText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                        handleAddCommentSubmit();
-                      }
-                    }}
-                    rows={2}
-                    placeholder="Write a comment or note for today's activity... (Ctrl+Enter to post)"
-                    className="flex-1 px-3 py-2 rounded-xl bg-slate-800/90 border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
-                  />
+                  <div className="relative flex-1">
+                    <textarea
+                      value={newCommentText}
+                      onChange={(e) => setNewCommentText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                          handleAddCommentSubmit();
+                        }
+                      }}
+                      rows={2}
+                      placeholder="Write a comment or note for today's activity... (Ctrl+Enter to post)"
+                      className="w-full px-3 py-2 pr-10 rounded-xl bg-slate-800/90 border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
+                    />
+                    <div className="absolute right-2 bottom-2.5">
+                      <VoiceInputButton
+                        onTranscript={(txt) =>
+                          setNewCommentText((prev) => (prev ? `${prev} ${txt}` : txt))
+                        }
+                        size="sm"
+                        title="Voice dictation for note"
+                      />
+                    </div>
+                  </div>
                   <button
                     type="button"
                     disabled={!newCommentText.trim() || isSubmittingComment}
                     onClick={handleAddCommentSubmit}
-                    className="self-end sm:self-auto min-h-[38px] px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer shadow-md shadow-blue-600/20 active:scale-95"
+                    className="self-end sm:self-auto min-h-[38px] px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer shadow-md shadow-blue-600/20 active:scale-95 shrink-0"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Post</span>

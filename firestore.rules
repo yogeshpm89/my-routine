@@ -35,6 +35,11 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      // Life goals collection
+      match /life_goals/{goalId} {
+        allow read, write: if isOwner(userId);
+      }
+
       // Notification preferences
       match /settings/{settingId} {
         allow read, write: if isOwner(userId);

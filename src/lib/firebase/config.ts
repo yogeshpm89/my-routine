@@ -97,7 +97,9 @@ export function cleanForFirestore<T>(data: T): T {
     return data;
   }
   if (Array.isArray(data)) {
-    return data.map((item) => cleanForFirestore(item)) as unknown as T;
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => cleanForFirestore(item)) as unknown as T;
   }
   if (typeof data === 'object' && !(data instanceof Date)) {
     const res: Record<string, any> = {};

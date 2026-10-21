@@ -22,6 +22,7 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
+  getDocs,
 } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'my_routine_life_goals_';
@@ -140,12 +141,18 @@ export class LifeGoalRepository {
     SyncEngine.notifyListeners(userId);
 
     if (canSyncWithFirestore(userId)) {
-      setDoc(
-        doc(db, `users/${userId}/life_goals`, goal.id),
-        cleanForFirestore(updatedGoal)
-      ).catch((err) => {
-        console.warn('Failed to sync life goal to Firestore:', err);
-      });
+      try {
+        await setDoc(
+          doc(db, `users/${userId}/life_goals`, goal.id),
+          cleanForFirestore(updatedGoal)
+        );
+        const q = MutationQueue.getQueue(userId);
+        const m = q.find((item) => item.collection === 'life_goals' && item.docId === goal.id);
+        if (m) MutationQueue.dequeue(userId, m.id);
+        SyncEngine.notifyListeners(userId);
+      } catch (err) {
+        console.warn('Failed to sync life goal to Firestore, queued locally:', err);
+      }
     }
 
     return updatedGoal;
@@ -1120,10 +1127,59 @@ export class LifeGoalRepository {
     SyncEngine.notifyListeners(userId);
 
     if (canSyncWithFirestore(userId)) {
-      deleteDoc(doc(db, `users/${userId}/life_goals`, goalId)).catch((err) => {
-        console.warn('Failed to delete life goal from Firestore:', err);
-      });
+      try {
+        await deleteDoc(doc(db, `users/${userId}/life_goals`, goalId));
+        const q = MutationQueue.getQueue(userId);
+        const m = q.find((item) => item.collection === 'life_goals' && item.docId === goalId);
+        if (m) MutationQueue.dequeue(userId, m.id);
+        SyncEngine.notifyListeners(userId);
+      } catch (err) {
+        console.warn('Failed to delete life goal from Firestore, queued locally:', err);
+      }
     }
+  }
+
+  static async getLifeGoals(userId: string): Promise<LifeGoal[]> {
+    const local = this.getLocalLifeGoals(userId);
+    if (canSyncWithFirestore(userId)) {
+      try {
+        const colRef = collection(db, `users/${userId}/life_goals`);
+        const snapshot = await getDocs(colRef);
+        if (!snapshot.empty) {
+          const remote: LifeGoal[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data() as LifeGoal;
+            if (data.status !== 'archived') {
+              remote.push(data);
+            }
+          });
+          const pendingIds = new Set(
+            MutationQueue.getQueue(userId)
+              .filter((m) => m.collection === 'life_goals')
+              .map((m) => m.docId)
+          );
+          const mergedMap = new Map<string, LifeGoal>();
+          remote.forEach((g) => mergedMap.set(g.id, g));
+          local.forEach((g) => {
+            if (pendingIds.has(g.id) || !mergedMap.has(g.id)) {
+              mergedMap.set(g.id, g);
+            }
+          });
+          const merged = Array.from(mergedMap.values());
+          this.saveLocalLifeGoals(userId, merged);
+          return merged;
+        } else if (local.length > 0) {
+          for (const g of local) {
+            await setDoc(doc(db, `users/${userId}/life_goals`, g.id), cleanForFirestore(g)).catch(
+              console.warn
+            );
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch life goals from Firestore:', err);
+      }
+    }
+    return local;
   }
 
   static subscribeLifeGoals(
@@ -1151,8 +1207,22 @@ export class LifeGoalRepository {
                 remote.push(data);
               }
             });
-            this.saveLocalLifeGoals(userId, remote);
-            onData(remote);
+            const pendingIds = new Set(
+              MutationQueue.getQueue(userId)
+                .filter((m) => m.collection === 'life_goals')
+                .map((m) => m.docId)
+            );
+            const localLifeGoals = this.getLocalLifeGoals(userId);
+            const mergedMap = new Map<string, LifeGoal>();
+            remote.forEach((g) => mergedMap.set(g.id, g));
+            localLifeGoals.forEach((g) => {
+              if (pendingIds.has(g.id) || !mergedMap.has(g.id)) {
+                mergedMap.set(g.id, g);
+              }
+            });
+            const merged = Array.from(mergedMap.values());
+            this.saveLocalLifeGoals(userId, merged);
+            onData(merged);
           } else if (local.length > 0) {
             for (const g of local) {
               setDoc(doc(db, `users/${userId}/life_goals`, g.id), cleanForFirestore(g)).catch(

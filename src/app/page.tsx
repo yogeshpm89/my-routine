@@ -20,7 +20,6 @@ import { detectScheduleConflicts } from '@/lib/conflict-detector';
 import { getTodayDateString, addDays, getDayOfWeek, calculateDuration, formatDisplayDate } from '@/lib/time-utils';
 import { CurrentActivityCard } from '@/components/routine/current-activity-card';
 import { TodayTimeline } from '@/components/routine/today-timeline';
-import { ConflictBanner } from '@/components/routine/conflict-banner';
 import { WeekView } from '@/components/calendar/week-view';
 import { MonthView } from '@/components/calendar/month-view';
 import { SettingsTab } from '@/components/settings/settings-tab';
@@ -179,16 +178,18 @@ export default function RoutineApp() {
     if (authLoading || !userId) return;
     setIsLoading(true);
     try {
-      const [tList, oList, lList, gList] = await Promise.all([
+      const [tList, oList, lList, gList, lgList] = await Promise.all([
         RoutineRepository.getTemplates(userId),
         OverrideRepository.getOverridesForDate(userId, selectedDate),
         LogRepository.getLogsForDate(userId, selectedDate),
         GoalRepository.getGoals(userId),
+        LifeGoalRepository.getLifeGoals(userId),
       ]);
       setTemplates(tList);
       setOverrides(oList);
       setLogs(lList);
       setGoals(gList);
+      setLifeGoals(lgList);
     } catch (err) {
       console.error('Failed to load routine data:', err);
     } finally {
@@ -1454,12 +1455,9 @@ export default function RoutineApp() {
                 onExecuteAi={handleExecuteAiForOccurrence}
                 onToggleStep={handleToggleStep}
                 onResumeRoutine={handleResumeCompleteRoutine}
-              />
-
-              {/* Conflict & Goal Advisory Banner */}
-              <ConflictBanner
-                conflicts={conflicts}
-                onOpenActivity={handleOpenActivityByTemplateId}
+                onAddComment={handleAddComment}
+                onUpdateComment={handleUpdateComment}
+                onDeleteComment={handleDeleteComment}
               />
 
               {/* Schedule Timeline */}

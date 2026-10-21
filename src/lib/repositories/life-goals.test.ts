@@ -615,5 +615,45 @@ describe('Personal and Professional Life Goals System', () => {
     const afterDelete = await LifeGoalRepository.deleteExperienceEntry(userId, goal.id, exp!.id);
     expect(afterDelete?.experiences?.find((e) => e.id === exp!.id)).toBeUndefined();
   });
+
+  it('retrieves goals via getLifeGoals and maintains action item list updates', async () => {
+    const goals = await LifeGoalRepository.getLifeGoals(userId);
+    expect(goals.length).toBeGreaterThanOrEqual(3);
+
+    const bookGoal = goals.find((g) => g.title.toLowerCase().includes('book') || g.category === 'reading');
+    expect(bookGoal).toBeDefined();
+
+    // Update goal with a new action item list
+    const updatedWithList: LifeGoal = {
+      ...bookGoal!,
+      title: 'Book reading',
+      lists: [
+        ...(bookGoal!.lists || []),
+        {
+          id: 'list_action_items',
+          title: 'Action Items',
+          type: 'checklist',
+          items: [
+            { id: 'act_1', text: 'Buy Kindle Paperwhite', isCompleted: false },
+            { id: 'act_2', text: 'Read 20 pages before bed', isCompleted: true },
+          ],
+        },
+      ],
+    };
+
+    const saved = await LifeGoalRepository.saveGoal(updatedWithList);
+    expect(saved.title).toBe('Book reading');
+    const actionList = saved.lists?.find((l) => l.title === 'Action Items');
+    expect(actionList).toBeDefined();
+    expect(actionList?.items.length).toBe(2);
+
+    // Re-fetch via getLifeGoals
+    const refetched = await LifeGoalRepository.getLifeGoals(userId);
+    const refetchedBookGoal = refetched.find((g) => g.id === bookGoal!.id);
+    expect(refetchedBookGoal?.title).toBe('Book reading');
+    const refetchedActionList = refetchedBookGoal?.lists?.find((l) => l.title === 'Action Items');
+    expect(refetchedActionList).toBeDefined();
+    expect(refetchedActionList?.items.length).toBe(2);
+  });
 });
 

@@ -23,8 +23,16 @@ import {
   ListChecks,
   Check,
   Palmtree,
+  MessageSquare,
+  Send,
+  Edit2,
+  Trash2,
+  ChevronDown,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
+import { getActivityTheme } from '@/lib/activity-styles';
+import { VoiceInputButton } from './voice-input-button';
+import { cn } from '@/lib/utils';
 
 interface CurrentActivityCardProps {
   occurrences: ActivityOccurrence[];
@@ -38,6 +46,9 @@ interface CurrentActivityCardProps {
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
   onResumeRoutine?: () => void;
+  onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
+  onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
+  onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
 }
 
 export function CurrentActivityCard({
@@ -48,8 +59,16 @@ export function CurrentActivityCard({
   onExecuteAi,
   onToggleStep,
   onResumeRoutine,
+  onAddComment,
+  onUpdateComment,
+  onDeleteComment,
 }: CurrentActivityCardProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
+  const [showComments, setShowComments] = useState(false);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   useEffect(() => {
     const update = () => setCurrentTime(getCurrentTimeString('Asia/Kolkata'));
@@ -92,11 +111,62 @@ export function CurrentActivityCard({
   const status = currentOccurrence?.log?.status ?? 'pending';
   const isAllSkipped = occurrences.length > 0 && occurrences.every((o) => o.log?.status === 'skipped');
 
+  // Category-specific theme styling for the current activity
+  const activeTheme = currentOccurrence ? getActivityTheme(currentOccurrence.category) : null;
+
+  const rawComments = currentOccurrence ? currentOccurrence.comments || currentOccurrence.log?.comments || [] : [];
+  const allComments = currentOccurrence
+    ? [
+        ...rawComments,
+        ...(currentOccurrence.log?.completionNotes && !rawComments.some((c) => c.text === currentOccurrence.log?.completionNotes)
+          ? [{ id: `log_note_${currentOccurrence.occurrenceId}`, text: currentOccurrence.log.completionNotes, createdAt: currentOccurrence.log.updatedAt || Date.now() }]
+          : []),
+      ]
+    : [];
+
+  const handleAddCommentSubmit = async () => {
+    if (!newCommentText.trim() || isSubmittingComment || !currentOccurrence) return;
+    setIsSubmittingComment(true);
+    try {
+      await onAddComment?.(currentOccurrence, newCommentText.trim());
+      setNewCommentText('');
+      setShowComments(true);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-blue-950/40 p-5 sm:p-6 border border-white/10 shadow-2xl backdrop-blur-xl">
-      {/* Subtle background glow */}
-      <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-2xl p-5 sm:p-6 border shadow-2xl backdrop-blur-xl transition-all duration-300',
+        activeTheme
+          ? cn('bg-gradient-to-br', activeTheme.cardGradient, activeTheme.borderColor)
+          : 'bg-gradient-to-br from-slate-900 via-slate-900/90 to-blue-950/40 border-white/10'
+      )}
+    >
+      {/* Category-specific dynamic ambient background glow */}
+      {activeTheme ? (
+        <>
+          <div
+            className={cn(
+              'absolute -right-20 -top-20 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-700',
+              activeTheme.ambientGlowA
+            )}
+          />
+          <div
+            className={cn(
+              'absolute -left-20 -bottom-20 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-700',
+              activeTheme.ambientGlowB
+            )}
+          />
+        </>
+      ) : (
+        <>
+          <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        </>
+      )}
 
       {isAllSkipped ? (
         <div className="relative z-10 py-2 space-y-3">
@@ -387,12 +457,193 @@ export function CurrentActivityCard({
             </div>
           )}
 
-          {/* Notes Preview if available */}
+          {/* Routine Notes Preview if available */}
           {currentOccurrence.notes && (
-            <p className="text-xs text-slate-400 italic bg-white/5 p-2.5 rounded-lg border border-white/5">
-              &ldquo;{currentOccurrence.notes}&rdquo;
-            </p>
+            <div className="text-xs text-slate-300 italic bg-white/5 p-3 rounded-xl border border-white/5 flex items-start gap-2">
+              <span className="not-italic font-bold text-slate-400">💡 Note:</span>
+              <p className="flex-1">&ldquo;{currentOccurrence.notes}&rdquo;</p>
+            </div>
           )}
+
+          {/* Interactive Comments & Notes Section on Current Activity Card */}
+          <div className="pt-2 border-t border-white/10 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                id="btn-current-toggle-comments"
+                onClick={() => setShowComments(!showComments)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-200 hover:text-white transition cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
+                <span>Comments & Daily Notes</span>
+                {allComments.length > 0 && (
+                  <span className="text-[10px] font-bold text-blue-300 px-1.5 py-0.2 rounded-full bg-blue-500/20 border border-blue-500/30">
+                    {allComments.length}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    'w-3.5 h-3.5 text-slate-400 transition-transform duration-200',
+                    showComments && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              {!showComments && (
+                <button
+                  type="button"
+                  id="btn-current-quick-add-note"
+                  onClick={() => setShowComments(true)}
+                  className="text-xs text-blue-400 hover:text-blue-300 font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>+ Add Note</span>
+                </button>
+              )}
+            </div>
+
+            {/* Expanded Comments Container */}
+            {showComments && (
+              <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                {/* List of comments for this occurrence */}
+                {allComments.length > 0 ? (
+                  <div className="space-y-2">
+                    {allComments.map((comment) => {
+                      const isEditing = editingCommentId === comment.id;
+                      const dateFormatted = new Date(comment.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      });
+
+                      return (
+                        <div
+                          key={comment.id}
+                          className="p-3 rounded-xl bg-slate-900/80 border border-white/10 space-y-1.5 text-xs group"
+                        >
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editingText}
+                                onChange={(e) => setEditingText(e.target.value)}
+                                rows={2}
+                                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-blue-500/50 text-xs text-white focus:outline-none"
+                                placeholder="Edit comment..."
+                              />
+                              <div className="flex items-center justify-between gap-2">
+                                <VoiceInputButton
+                                  onTranscript={(txt) =>
+                                    setEditingText((prev) => (prev ? `${prev} ${txt}` : txt))
+                                  }
+                                  size="sm"
+                                  title="Voice dictation for note"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingCommentId(null)}
+                                    className="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-white"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!editingText.trim()) return;
+                                      await onUpdateComment?.(currentOccurrence, comment.id, editingText);
+                                      setEditingCommentId(null);
+                                    }}
+                                    className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-0.5 flex-1">
+                                <p className="text-slate-100 text-xs whitespace-pre-wrap leading-relaxed">
+                                  {comment.text}
+                                </p>
+                                <span className="text-[10px] text-slate-400 block">
+                                  {dateFormatted}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCommentId(comment.id);
+                                    setEditingText(comment.text);
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-slate-800 transition cursor-pointer"
+                                  title="Edit note"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteComment?.(currentOccurrence, comment.id)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                                  title="Delete note"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic py-1">
+                    No notes logged for this activity yet today.
+                  </p>
+                )}
+
+                {/* Add Comment Input Form with Voice Dictation */}
+                <div className="pt-1">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <textarea
+                        id="input-current-comment"
+                        value={newCommentText}
+                        onChange={(e) => setNewCommentText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            handleAddCommentSubmit();
+                          }
+                        }}
+                        rows={2}
+                        placeholder="Write a note or comment for current routine... (Ctrl+Enter to post)"
+                        className="w-full px-3 py-2 pr-10 rounded-xl bg-slate-900/90 border border-white/10 text-white text-xs placeholder:text-slate-400 focus:outline-none focus:border-blue-500 transition"
+                      />
+                      <div className="absolute right-2 bottom-2.5">
+                        <VoiceInputButton
+                          onTranscript={(txt) =>
+                            setNewCommentText((prev) => (prev ? `${prev} ${txt}` : txt))
+                          }
+                          size="sm"
+                          title="Voice dictation for note"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      id="btn-current-post-comment"
+                      disabled={!newCommentText.trim() || isSubmittingComment}
+                      onClick={handleAddCommentSubmit}
+                      className="self-end sm:self-auto min-h-[38px] px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer shadow-md shadow-blue-600/20 active:scale-95 shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Post Note</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Next Activity Preview */}
           {nextOccurrence && (
