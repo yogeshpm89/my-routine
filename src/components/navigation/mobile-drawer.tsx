@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Target,
+  Gauge,
 } from 'lucide-react';
 
 interface MobileDrawerProps {
@@ -29,6 +30,7 @@ interface MobileDrawerProps {
   onOpenCreate: () => void;
   onSyncNow?: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
+  onOpenSpeedometer?: () => void;
   user: any;
   isDemoMode: boolean;
   onSignOut: () => Promise<void>;
@@ -42,6 +44,7 @@ export function MobileDrawer({
   onOpenCreate,
   onSyncNow,
   onOpenAuth,
+  onOpenSpeedometer,
   user,
   isDemoMode,
   onSignOut,
@@ -245,6 +248,39 @@ export function MobileDrawer({
               </button>
             );
           })}
+
+          {/* Quick Tools Section */}
+          {onOpenSpeedometer && (
+            <div className="pt-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 py-1 block">
+                Quick Utilities
+              </span>
+              <button
+                type="button"
+                id="drawer-btn-speedometer"
+                onClick={() => {
+                  onClose();
+                  onOpenSpeedometer();
+                }}
+                className="w-full min-h-[48px] flex items-center justify-between p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-slate-200 hover:bg-cyan-950/70 hover:text-white transition text-left active:scale-[0.98] cursor-pointer shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 shrink-0">
+                    <Gauge className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold block text-white leading-tight">
+                      Speedometer & Trip
+                    </span>
+                    <span className="text-[11px] text-cyan-300/80 block leading-tight mt-0.5">
+                      GPS speed, HUD & pace logger
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-cyan-400" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Drawer Footer with Actions & Auth */}

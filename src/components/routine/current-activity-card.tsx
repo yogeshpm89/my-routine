@@ -28,6 +28,7 @@ import {
   Edit2,
   Trash2,
   ChevronDown,
+  Gauge,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { getActivityTheme } from '@/lib/activity-styles';
@@ -49,6 +50,7 @@ interface CurrentActivityCardProps {
   onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
   onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
   onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
+  onOpenSpeedometer?: () => void;
 }
 
 export function CurrentActivityCard({
@@ -62,6 +64,7 @@ export function CurrentActivityCard({
   onAddComment,
   onUpdateComment,
   onDeleteComment,
+  onOpenSpeedometer,
 }: CurrentActivityCardProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [showComments, setShowComments] = useState(false);
@@ -349,6 +352,17 @@ export function CurrentActivityCard({
                       title="Execute attached AI Routine Action"
                     >
                       <Sparkles className="w-3.5 h-3.5" /> Execute AI
+                    </button>
+                  )}
+                  {onOpenSpeedometer && (
+                    <button
+                      id="btn-current-speedometer"
+                      onClick={onOpenSpeedometer}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] text-xs sm:text-sm font-semibold rounded-xl bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                      title="Open GPS Speedometer & Trip Tracker"
+                    >
+                      <Gauge className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Speed</span>
                     </button>
                   )}
                 </>

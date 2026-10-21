@@ -17,7 +17,15 @@ import { LogRepository } from '@/lib/repositories/log-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { detectScheduleConflicts } from '@/lib/conflict-detector';
-import { getTodayDateString, addDays, getDayOfWeek, calculateDuration, formatDisplayDate } from '@/lib/time-utils';
+import {
+  getTodayDateString,
+  addDays,
+  getDayOfWeek,
+  calculateDuration,
+  formatDisplayDate,
+  timeToMinutes,
+  getCurrentTimeString,
+} from '@/lib/time-utils';
 import { CurrentActivityCard } from '@/components/routine/current-activity-card';
 import { TodayTimeline } from '@/components/routine/today-timeline';
 import { WeekView } from '@/components/calendar/week-view';
@@ -47,6 +55,7 @@ import { LifeGoal, GoalTrackedItem, GoalExperienceEntry } from '@/types/goals';
 import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import { GoalsDashboard } from '@/components/goals/goals-dashboard';
 import { syncOccurrencesToWidget } from '@/lib/widget/routine-widget';
+import { SpeedometerModal } from '@/components/speedometer/speedometer-modal';
 import {
   Clock,
   CalendarDays,
@@ -64,6 +73,7 @@ import {
   UserPlus,
   Menu,
   Target,
+  Gauge,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { canSyncWithFirestore } from '@/lib/firebase/config';
@@ -109,6 +119,9 @@ export default function RoutineApp() {
 
   // Skip complete routine state
   const [skipRoutineModalOpen, setSkipRoutineModalOpen] = useState(false);
+
+  // Speedometer modal state
+  const [speedometerOpen, setSpeedometerOpen] = useState(false);
 
   // In-app media player state
   const [activeMediaOccurrence, setActiveMediaOccurrence] = useState<ActivityOccurrence | null>(null);
@@ -1270,6 +1283,18 @@ export default function RoutineApp() {
                   </button>
                 )}
 
+                {/* GPS Speedometer Quick Launcher */}
+                <button
+                  type="button"
+                  id="btn-header-speedometer"
+                  onClick={() => setSpeedometerOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-xl bg-cyan-950/70 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/60 hover:text-white transition cursor-pointer min-h-[36px] shadow-sm shadow-cyan-950/20 active:scale-95"
+                  title="Open GPS Speedometer & Trip Tracker"
+                >
+                  <Gauge className="w-4 h-4 text-cyan-400" />
+                  <span className="hidden sm:inline">Speed</span>
+                </button>
+
                 <div className="hidden sm:block">
                   <UserMenu />
                 </div>
@@ -1458,6 +1483,7 @@ export default function RoutineApp() {
                 onAddComment={handleAddComment}
                 onUpdateComment={handleUpdateComment}
                 onDeleteComment={handleDeleteComment}
+                onOpenSpeedometer={() => setSpeedometerOpen(true)}
               />
 
               {/* Schedule Timeline */}
@@ -1754,12 +1780,30 @@ export default function RoutineApp() {
               setMobileDrawerOpen(false);
               openAuth(mode);
             }}
+            onOpenSpeedometer={() => {
+              setMobileDrawerOpen(false);
+              setSpeedometerOpen(true);
+            }}
             user={user}
             isDemoMode={isDemoMode}
             onSignOut={async () => {
               setMobileDrawerOpen(false);
               await signOut();
             }}
+          />
+
+          {/* GPS Speedometer & Trip Tracker Modal */}
+          <SpeedometerModal
+            isOpen={speedometerOpen}
+            onClose={() => setSpeedometerOpen(false)}
+            occurrences={occurrences}
+            activeOccurrence={occurrences.find((o) => {
+              const startM = timeToMinutes(o.startTime);
+              const endM = timeToMinutes(o.endTime);
+              const curM = timeToMinutes(getCurrentTimeString('Asia/Kolkata'));
+              return endM >= startM ? curM >= startM && curM < endM : curM >= startM || curM < endM;
+            })}
+            onAddComment={handleAddComment}
           />
         </>
       )}
