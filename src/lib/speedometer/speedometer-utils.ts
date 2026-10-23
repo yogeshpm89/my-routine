@@ -59,6 +59,28 @@ export function convertSpeed(metersPerSec: number, unit: SpeedUnit): number {
 }
 
 /**
+ * Checks whether a speed measurement is valid and non-negative.
+ */
+export function isValidSpeed(speed: number | null | undefined): speed is number {
+  return typeof speed === 'number' && !isNaN(speed) && isFinite(speed) && speed >= 0;
+}
+
+/**
+ * Formats a speed value in meters per second to the target unit display string.
+ * Returns '--' (or '--:--' for pace) if the speed is null, undefined, or invalid.
+ */
+export function formatSpeedValue(speedMs: number | null | undefined, unit: SpeedUnit): string {
+  if (!isValidSpeed(speedMs)) {
+    return unit === 'pace' ? '--:--' : '--';
+  }
+  if (unit === 'pace') {
+    return formatPace(convertSpeed(speedMs, 'pace'));
+  }
+  const val = convertSpeed(speedMs, unit);
+  return val >= 100 ? Math.round(val).toString() : val.toFixed(1);
+}
+
+/**
  * Formats pace (minutes per km/mi) as MM:SS
  */
 export function formatPace(paceDecimalMinutes: number): string {
