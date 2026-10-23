@@ -237,3 +237,51 @@ The test suite covers every tier of the application with 27 automated tests:
 - [`notification-manager.test.ts`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/src/lib/notifications/notification-manager.test.ts): 72-hour rolling schedule generation, quiet hours filtering, and 32-bit ID hashing.
 - [`analytics-calculator.test.ts`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/src/lib/analytics/analytics-calculator.test.ts): Adherence calculations, category breakdown, and goal fulfillment.
 - [`integration.test.ts`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/src/lib/integration.test.ts): End-to-end user journey across seed initialization, 3-way edits, status logging, offline queue replay, and backup restoration.
+
+---
+
+## 🎨 App Icons & Branding Assets
+
+The application uses an automated icon generation pipeline based on [`sharp`](https://sharp.pixelplumbing.com/) to maintain visual consistency across Web, PWA, and Native Android launcher surfaces.
+
+### 1. Asset Locations
+- **Master Artwork**: [`public/icon-master.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/icon-master.png) (1254 x 1254 px source of truth).
+- **Web Favicon & PWA Icons**:
+  - Favicons: [`public/favicon.ico`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/favicon.ico), [`public/favicon-16x16.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/favicon-16x16.png), [`public/favicon-32x32.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/favicon-32x32.png), [`src/app/favicon.ico`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/src/app/favicon.ico)
+  - iOS Bookmark Icon: [`public/apple-touch-icon.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/apple-touch-icon.png) (180x180 px)
+  - PWA Standard Icons: [`public/icon-192x192.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/icon-192x192.png), [`public/icon-512x512.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/icon-512x512.png)
+  - PWA Maskable Icon: [`public/icon-maskable-512x512.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/icon-maskable-512x512.png) (78% safe-zone scaled on `#0B1A32`)
+  - Web App Manifest: [`public/manifest.json`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/manifest.json)
+  - In-App Brand Logos: [`public/logo.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/logo.png), [`public/MyRoutine.png`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/public/MyRoutine.png)
+- **Android Native Launcher**:
+  - Adaptive Background Color: [`android/app/src/main/res/values/ic_launcher_background.xml`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/android/app/src/main/res/values/ic_launcher_background.xml) (`#0B1A32`)
+  - Adaptive Configurations: [`android/app/src/main/res/mipmap-anydpi-v26/`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/android/app/src/main/res/mipmap-anydpi-v26/) (`ic_launcher.xml`, `ic_launcher_round.xml`)
+  - Density Mipmaps: [`android/app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/`](file:///c:/Users/YogeshMurdeshwar/projects/self/my-routine/android/app/src/main/res/)
+    - Legacy Standard: `ic_launcher.png` (48px to 192px)
+    - Legacy Round: `ic_launcher_round.png` (48px to 192px circular-masked)
+    - Adaptive Foreground: `ic_launcher_foreground.png` (108px to 432px with central 66% safe zone)
+
+### 2. Regenerating Icons
+Whenever `public/icon-master.png` is updated, run:
+```bash
+npm run icons:generate
+```
+This regenerates all 23 production image files and updates `ic_launcher_background.xml` deterministically.
+
+### 3. Rebuilding the Project
+```bash
+# Static Web Bundle (generates out/ with metadata and icons)
+npm run build:web
+
+# Mobile Build & Capacitor Android Sync
+npm run build:mobile
+
+# Native Android Compilation (requires Android SDK / Android Studio)
+cd android && ./gradlew assembleDebug
+```
+
+### 4. Platform Considerations
+- **Adaptive Safe Zone**: Android 8.0+ applies diverse OEM launcher masks (circles, squircles, teardrops, rounded squares) across a 108dp canvas. The foreground is centered within the 72dp safe zone to ensure no clipping of the clock face or checklist.
+- **PWA Maskable Icons**: The maskable icon provides a 22% padding margin on `#0B1A32` to meet W3C safe-zone requirements on mobile browsers.
+- **Browser Caching**: Browsers aggressively cache `favicon.ico`. When verifying updates in a browser, use hard refresh (`Ctrl + Shift + R` or `Cmd + Shift + R`) or an incognito tab.
+
