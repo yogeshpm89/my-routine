@@ -44,11 +44,11 @@ describe('Mobile App & Offline Revalidation', () => {
         return {
           ok: true,
           json: async () => ({
-            version: '1.4.1',
-            versionCode: 7,
+            version: '1.5.0',
+            versionCode: 8,
             minSupportedVersion: '1.0.0',
             releaseDate: '2026-10-24',
-            title: 'v1.4.1',
+            title: 'v1.5.0',
             changelog: ['Minute-level progress', 'Multiple templates', 'Mobile layout fixes'],
             apkUrl: 'https://github.com/yogeshpm89/my-routine/releases/latest/download/my-routine-release.apk',
             fileSizeBytes: 9952841,
@@ -59,7 +59,7 @@ describe('Mobile App & Offline Revalidation', () => {
 
       const manifest = await UpdateManager.fetchLatestManifest();
       expect(manifest).not.toBeNull();
-      expect(manifest?.version).toBe('1.4.1');
+      expect(manifest?.version).toBe('1.5.0');
 
       // Crucial: Must fetch from remote firebase hosting URL, NOT localhost
       expect(fetchSpy).toHaveBeenCalledWith(

@@ -18,6 +18,8 @@ import { GoalEditorModal } from './goal-editor-modal';
 import { LogProgressModal } from './log-progress-modal';
 import { LogActivityModal } from './log-activity-modal';
 import { ItemEditorModal } from './item-editor-modal';
+import { ItemQuickProgress } from './item-quick-progress';
+import { LogItemProgressModal } from './log-item-progress-modal';
 import {
   Target,
   Plus,
@@ -57,6 +59,7 @@ import {
   Smile,
   AlertCircle,
   Lightbulb,
+  RotateCcw,
 } from 'lucide-react';
 
 interface GoalsDashboardProps {
@@ -96,6 +99,18 @@ interface GoalsDashboardProps {
     currentUnits: number,
     markCompleted?: boolean
   ) => Promise<void> | void;
+  onLogItemProgress?: (
+    goalId: string,
+    itemId: string,
+    data: {
+      deltaUnits?: number;
+      setAbsoluteUnits?: number;
+      note?: string;
+      date?: string;
+      markCompleted?: boolean;
+    }
+  ) => Promise<void> | void;
+  onUndoProgressLog?: (goalId: string, logId: string) => Promise<void> | void;
 
   // Structured Phase Roadmap Handlers
   onTogglePhaseStatus?: (goalId: string, phaseId: string) => Promise<void> | void;
@@ -135,6 +150,8 @@ export function GoalsDashboard({
   onSaveTrackedItem,
   onDeleteTrackedItem,
   onUpdateItemProgress,
+  onLogItemProgress,
+  onUndoProgressLog,
   onTogglePhaseStatus,
   onAddPhaseTask,
   onTogglePhaseTask,
@@ -165,6 +182,10 @@ export function GoalsDashboard({
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [activeItemGoal, setActiveItemGoal] = useState<LifeGoal | null>(null);
   const [editingItem, setEditingItem] = useState<GoalTrackedItem | null>(null);
+
+  // Minor item progress modal
+  const [itemProgressModalOpen, setItemProgressModalOpen] = useState(false);
+  const [selectedItemForLog, setSelectedItemForLog] = useState<{ goal: LifeGoal; item: GoalTrackedItem } | null>(null);
 
   // Clipboard feedback
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -1417,6 +1438,23 @@ export function GoalsDashboard({
                                 </button>
                               )}
                             </div>
+
+                            {/* Minor Progress Quick Controls */}
+                            <ItemQuickProgress
+                              goalId={goal.id}
+                              item={item}
+                              onLogQuickIncrement={async (gId, iId, delta) => {
+                                if (onLogItemProgress) {
+                                  await onLogItemProgress(gId, iId, { deltaUnits: delta });
+                                } else if (onUpdateItemProgress) {
+                                  await onUpdateItemProgress(gId, iId, item.currentUnits + delta);
+                                }
+                              }}
+                              onOpenCustomLog={(it) => {
+                                setSelectedItemForLog({ goal, item: it });
+                                setItemProgressModalOpen(true);
+                              }}
+                            />
                           </div>
                         );
                       })}
@@ -1427,16 +1465,73 @@ export function GoalsDashboard({
                 {/* --- TAB CONTENT 5: OVERVIEW & STATS --- */}
                 {activeTab === 'tracker' && (
                   <div className="p-3 rounded-xl bg-slate-950/70 border border-white/5 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
                       <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-[10px] text-slate-500 block">Total Activities</span>
+                        <span className="text-[10px] text-slate-500 block">Activities</span>
                         <strong className="text-white text-sm font-bold">{activities.length}</strong>
                       </div>
                       <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-[10px] text-slate-500 block">Invested Hours</span>
+                        <span className="text-[10px] text-slate-500 block">Invested</span>
                         <strong className="text-emerald-400 text-sm font-bold">{goalHours}h</strong>
                       </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">Progress Logs</span>
+                        <strong className="text-blue-400 text-sm font-bold">{(goal.progressLogs || []).length}</strong>
+                      </div>
                     </div>
+
+                    {/* Progress History Log Entries with Undo */}
+                    {(goal.progressLogs || []).length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
+                          <span>Recent Progress History</span>
+                          <span className="text-[10px] text-slate-500">{(goal.progressLogs || []).length} logs</span>
+                        </div>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                          {(goal.progressLogs || []).slice(0, 10).map((log) => (
+                            <div
+                              key={log.id}
+                              className="p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-xs flex items-center justify-between gap-2"
+                            >
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {log.itemTitle ? (
+                                    <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-300 truncate max-w-[130px]">
+                                      {log.itemTitle}
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-300">
+                                      Goal
+                                    </span>
+                                  )}
+                                  <span className="font-extrabold text-emerald-400 text-xs">
+                                    {log.valueChange >= 0 ? `+${log.valueChange}` : log.valueChange} {log.unitLabel || goal.unit}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500">
+                                    {log.date}
+                                  </span>
+                                </div>
+                                {log.note && (
+                                  <p className="text-[11px] text-slate-300 truncate max-w-[260px]">
+                                    "{log.note}"
+                                  </p>
+                                )}
+                              </div>
+                              {onUndoProgressLog && (
+                                <button
+                                  type="button"
+                                  onClick={() => onUndoProgressLog(goal.id, log.id)}
+                                  className="p-1 rounded-md text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer shrink-0"
+                                  title="Undo progress entry"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -1444,9 +1539,9 @@ export function GoalsDashboard({
                         setProgressGoal(goal);
                         setProgressModalOpen(true);
                       }}
-                      className="w-full py-1.5 px-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-semibold transition"
+                      className="w-full py-1.5 px-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-semibold transition cursor-pointer"
                     >
-                      + Log Numeric Progress
+                      + Log Whole Goal Progress
                     </button>
                   </div>
                 )}
@@ -1645,6 +1740,24 @@ export function GoalsDashboard({
             setItemModalOpen(false);
             setActiveItemGoal(null);
             setEditingItem(null);
+          }}
+        />
+      )}
+
+      {/* Minor Item Progress Modal */}
+      {selectedItemForLog && (
+        <LogItemProgressModal
+          isOpen={itemProgressModalOpen}
+          goal={selectedItemForLog.goal}
+          item={selectedItemForLog.item}
+          onClose={() => {
+            setItemProgressModalOpen(false);
+            setSelectedItemForLog(null);
+          }}
+          onSaveItemProgress={async (gId, iId, data) => {
+            if (onLogItemProgress) {
+              await onLogItemProgress(gId, iId, data);
+            }
           }}
         />
       )}

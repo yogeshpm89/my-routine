@@ -621,6 +621,58 @@ export default function RoutineApp() {
     }
   };
 
+
+  const handleLogItemProgress = async (
+    goalId: string,
+    itemId: string,
+    data: {
+      deltaUnits?: number;
+      setAbsoluteUnits?: number;
+      note?: string;
+      date?: string;
+      markCompleted?: boolean;
+    }
+  ) => {
+    const res = await LifeGoalRepository.logItemProgress(userId, goalId, itemId, data);
+    if (res) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === res.goal.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = res.goal;
+          return copy;
+        }
+        return [...prev, res.goal];
+      });
+      if (res.completedNow) {
+        showToast(`🎉 Completed "${res.updatedItem.title}"!`);
+      } else {
+        const delta =
+          data.deltaUnits !== undefined
+            ? data.deltaUnits >= 0
+              ? `+${data.deltaUnits}`
+              : `${data.deltaUnits}`
+            : '';
+        showToast(`Progress logged: ${delta} ${res.updatedItem.unitLabel} 📈`);
+      }
+    }
+  };
+
+  const handleUndoGoalProgressLog = async (goalId: string, logId: string) => {
+    const updated = await LifeGoalRepository.undoProgressLog(userId, goalId, logId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Progress entry undone ↩️');
+    }
+  };
   // Structured Phases Handlers
   const handleTogglePhaseStatus = async (goalId: string, phaseId: string) => {
     const updated = await LifeGoalRepository.togglePhaseStatus(userId, goalId, phaseId);
@@ -1756,6 +1808,8 @@ export default function RoutineApp() {
               onSaveTrackedItem={handleSaveGoalTrackedItem}
               onDeleteTrackedItem={handleDeleteGoalTrackedItem}
               onUpdateItemProgress={handleUpdateItemProgress}
+              onLogItemProgress={handleLogItemProgress}
+              onUndoProgressLog={handleUndoGoalProgressLog}
               onTogglePhaseStatus={handleTogglePhaseStatus}
               onAddPhaseTask={handleAddPhaseTask}
               onTogglePhaseTask={handleTogglePhaseTask}

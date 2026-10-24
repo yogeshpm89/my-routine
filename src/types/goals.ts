@@ -11,6 +11,7 @@ export const GoalTrackingModeSchema = z.enum([
   'phases',    // Multi-stage roadmap progression
   'tasks',     // Tasks & checklist completion %
   'metric',    // Traditional numeric target (books, kg, savings, etc.)
+  'items',     // Detailed tracked items (books, courses, projects)
   'habits',    // Daily routine activity streaks & consistency
   'journey',   // Open-ended qualitative journey tracked via experiences & reflections
 ]);
@@ -118,6 +119,15 @@ export const GoalProgressLogSchema = z.object({
   currentValue: z.number(),
   note: z.string().default(''),
   createdAt: z.number().default(() => Date.now()),
+
+  // Minor / Item-Level Progress Attribution (Optional)
+  itemId: z.string().optional(),
+  itemTitle: z.string().optional(),
+  unitLabel: z.string().optional(),
+  phaseId: z.string().optional(),
+  phaseTitle: z.string().optional(),
+  itemCurrentUnits: z.number().optional(),
+  itemTotalUnits: z.number().optional(),
 });
 export type GoalProgressLog = z.infer<typeof GoalProgressLogSchema>;
 
@@ -159,6 +169,7 @@ export const GoalTrackedItemSchema = z.object({
   links: z.array(GoalItemLinkSchema).optional(),
 
   customFields: z.array(GoalCustomFieldSchema).optional(),
+  quickIncrements: z.array(z.number()).optional(),
 
   rating: z.number().min(1).max(5).optional(),
   completedAt: z.number().optional(),
