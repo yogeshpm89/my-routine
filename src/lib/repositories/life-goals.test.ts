@@ -655,5 +655,180 @@ describe('Personal and Professional Life Goals System', () => {
     expect(refetchedActionList).toBeDefined();
     expect(refetchedActionList?.items.length).toBe(2);
   });
-});
 
+  it('logs minor incremental progress on tracked items (+10 pages) with enriched audit log', async () => {
+    const defaultGoals = getInitialLifeGoals(userId);
+    const readingGoal = defaultGoals[0]; // Read 30 books
+    const deepWork = readingGoal.items?.find((i) => i.title.includes('Deep Work'));
+    expect(deepWork).toBeDefined();
+    const initialUnits = deepWork!.currentUnits; // 185
+
+    const result = await LifeGoalRepository.logItemProgress(
+      userId,
+      readingGoal.id,
+      deepWork!.id,
+      {
+        deltaUnits: 15,
+        note: 'Finished chapter on Bimodal deep work scheduling',
+        date: '2026-10-24',
+      }
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.updatedItem.currentUnits).toBe(initialUnits + 15); // 200
+    expect(result?.updatedItem.status).toBe('in_progress');
+    expect(result?.completedNow).toBe(false);
+
+    // Verify enriched progress log entry
+    const latestLog = result?.goal.progressLogs[0];
+    expect(latestLog).toBeDefined();
+    expect(latestLog?.itemId).toBe(deepWork!.id);
+    expect(latestLog?.itemTitle).toBe(deepWork!.title);
+    expect(latestLog?.unitLabel).toBe('pages');
+    expect(latestLog?.valueChange).toBe(15);
+    expect(latestLog?.itemCurrentUnits).toBe(200);
+    expect(latestLog?.itemTotalUnits).toBe(deepWork!.totalUnits);
+    expect(latestLog?.note).toBe('Finished chapter on Bimodal deep work scheduling');
+    expect(latestLog?.date).toBe('2026-10-24');
+  });
+
+  it('automatically completes item and increments parent goal when totalUnits is reached', async () => {
+    const defaultGoals = getInitialLifeGoals(userId);
+    const readingGoal = defaultGoals[0];
+    const initialGoalCount = readingGoal.currentValue; // 8 books
+
+    // Add a book with 20 pages remaining
+    const withNewBook = await LifeGoalRepository.addTrackedItem(userId, readingGoal.id, {
+      title: 'Make Time',
+      itemType: 'book',
+      authorOrInstructor: 'Jake Knapp & John Zeratsky',
+      status: 'in_progress',
+      currentUnits: 280,
+      totalUnits: 300,
+      unitLabel: 'pages',
+      summary: 'Focus on what matters every day.',
+      notes: 'Highlight tactics.',
+    });
+    const makeTime = withNewBook?.items?.find((i) => i.title === 'Make Time');
+    expect(makeTime).toBeDefined();
+
+    // Log +25 pages (exceeding totalUnits 300)
+    const result = await LifeGoalRepository.logItemProgress(
+      userId,
+      readingGoal.id,
+      makeTime!.id,
+      {
+        deltaUnits: 25,
+        note: 'Finished the book! Great tactics on highlight selection.',
+      }
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.completedNow).toBe(true);
+    expect(result?.updatedItem.status).toBe('completed');
+    expect(result?.updatedItem.completedAt).toBeDefined();
+    expect(result?.updatedItem.currentUnits).toBe(305);
+
+    // Parent goal should increment by 1 book
+    expect(result?.goal.currentValue).toBe(initialGoalCount + 1);
+  });
+
+  it('reverses minor progress and restores item units with undoProgressLog', async () => {
+    const defaultGoals = getInitialLifeGoals(userId);
+    const readingGoal = defaultGoals[0];
+    const deepWork = readingGoal.items?.find((i) => i.title.includes('Deep Work'));
+    const initialUnits = deepWork!.currentUnits;
+
+    // Log +30 pages
+    const logRes = await LifeGoalRepository.logItemProgress(
+      userId,
+      readingGoal.id,
+      deepWork!.id,
+      { deltaUnits: 30, note: 'Accidental entry to be undone' }
+    );
+    expect(logRes?.updatedItem.currentUnits).toBe(initialUnits + 30);
+    const logId = logRes!.goal.progressLogs[0].id;
+
+    // Undo progress log
+    const undoneGoal = await LifeGoalRepository.undoProgressLog(userId, readingGoal.id, logId);
+    expect(undoneGoal).toBeDefined();
+
+    const restoredItem = undoneGoal?.items?.find((i) => i.id === deepWork!.id);
+    expect(restoredItem?.currentUnits).toBe(initialUnits);
+    expect(undoneGoal?.progressLogs.find((l) => l.id === logId)).toBeUndefined();
+  });
+
+  it('reverses item completion and parent goal count upon undoProgressLog', async () => {
+    const defaultGoals = getInitialLifeGoals(userId);
+    const readingGoal = defaultGoals[0];
+    const initialGoalCount = readingGoal.currentValue;
+
+    // Add book near completion
+    const withBook = await LifeGoalRepository.addTrackedItem(userId, readingGoal.id, {
+      title: 'Sprint',
+      itemType: 'book',
+      status: 'in_progress',
+      currentUnits: 270,
+      totalUnits: 280,
+      unitLabel: 'pages',
+      summary: 'Solve big problems in five days.',
+      notes: 'Prototyping guide.',
+    });
+    const book = withBook?.items?.find((i) => i.title === 'Sprint');
+
+    // Complete it with +15 pages
+    const completedRes = await LifeGoalRepository.logItemProgress(
+      userId,
+      readingGoal.id,
+      book!.id,
+      { deltaUnits: 15 }
+    );
+    expect(completedRes?.completedNow).toBe(true);
+    expect(completedRes?.goal.currentValue).toBe(initialGoalCount + 1);
+
+    const logId = completedRes!.goal.progressLogs[0].id;
+
+    // Undo the completion
+    const undoneGoal = await LifeGoalRepository.undoProgressLog(userId, readingGoal.id, logId);
+    expect(undoneGoal).toBeDefined();
+
+    const revertedBook = undoneGoal?.items?.find((i) => i.id === book!.id);
+    expect(revertedBook?.status).toBe('in_progress');
+    expect(revertedBook?.completedAt).toBeUndefined();
+    expect(revertedBook?.currentUnits).toBe(270);
+    expect(undoneGoal?.currentValue).toBe(initialGoalCount);
+  });
+
+  it('recalculates progress for goals with trackingMode = items', () => {
+    const goal: LifeGoal = {
+      id: 'test_items_mode_goal',
+      userId,
+      title: 'Complete 3 Core Projects',
+      domain: 'professional',
+      category: 'work',
+      trackingMode: 'items',
+      metricType: 'numeric',
+      startValue: 0,
+      currentValue: 0,
+      targetValue: 3,
+      unit: 'projects',
+      items: [
+        { id: 'i1', title: 'Project 1', itemType: 'project', status: 'completed', currentUnits: 10, totalUnits: 10, unitLabel: 'tasks', summary: '', notes: '', createdAt: 0, updatedAt: 0 },
+        { id: 'i2', title: 'Project 2', itemType: 'project', status: 'in_progress', currentUnits: 5, totalUnits: 10, unitLabel: 'tasks', summary: '', notes: '', createdAt: 0, updatedAt: 0 },
+        { id: 'i3', title: 'Project 3', itemType: 'project', status: 'not_started', currentUnits: 0, totalUnits: 10, unitLabel: 'tasks', summary: '', notes: '', createdAt: 0, updatedAt: 0 },
+      ],
+      startDate: '2026-10-01',
+      targetDate: '2026-12-31',
+      progressLogs: [],
+      status: 'in_progress',
+      color: '#3b82f6',
+      createdAt: 0,
+      updatedAt: 0,
+    };
+
+    const recalculated = LifeGoalRepository.recalculateGoalProgress(goal);
+    expect(recalculated.targetValue).toBe(3);
+    expect(recalculated.currentValue).toBe(1);
+    expect(recalculated.status).toBe('in_progress');
+  });
+});

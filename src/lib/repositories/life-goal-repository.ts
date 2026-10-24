@@ -13,6 +13,7 @@ import {
   GoalExperienceEntry,
 } from '@/types/goals';
 import { getInitialLifeGoals } from '@/lib/seed-goals';
+import { getTodayDateString } from '@/lib/time-utils';
 import { db, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import { SyncEngine } from '@/lib/sync/sync-engine';
@@ -88,6 +89,12 @@ export class LifeGoalRepository {
       if (allTasks.length > 0) {
         targetValue = allTasks.length;
         currentValue = allTasks.filter((t) => t.isCompleted).length;
+      }
+    } else if (trackingMode === 'items') {
+      const items = goal.items || [];
+      if (items.length > 0) {
+        targetValue = items.length;
+        currentValue = items.filter((i) => i.status === 'completed').length;
       }
     } else if (trackingMode === 'habits') {
       const activities = goal.activityRecords || [];
@@ -892,6 +899,183 @@ export class LifeGoalRepository {
     const updatedGoal: LifeGoal = {
       ...existing,
       items: updatedItems,
+      updatedAt: Date.now(),
+    };
+
+    return await this.saveGoal(updatedGoal);
+  }
+
+  // --- Minor / Incremental Item Progress & Audit Logging ---
+  static async logItemProgress(
+    userId: string,
+    goalId: string,
+    itemId: string,
+    data: {
+      deltaUnits?: number;
+      setAbsoluteUnits?: number;
+      note?: string;
+      date?: string;
+      markCompleted?: boolean;
+    }
+  ): Promise<{ goal: LifeGoal; updatedItem: GoalTrackedItem; completedNow: boolean } | null> {
+    const all = this.getLocalLifeGoals(userId);
+    const existing = all.find((g) => g.id === goalId);
+    if (!existing) return null;
+
+    const targetItem = (existing.items || []).find((i) => i.id === itemId);
+    if (!targetItem) return null;
+
+    let targetItemCompletedNow = false;
+    const wasAlreadyCompleted = targetItem.status === 'completed';
+
+    // Calculate new current units
+    let newUnits = targetItem.currentUnits;
+    let delta = 0;
+
+    if (data.setAbsoluteUnits !== undefined) {
+      newUnits = Math.max(0, Number(data.setAbsoluteUnits.toFixed(2)));
+      delta = Number((newUnits - targetItem.currentUnits).toFixed(2));
+    } else if (data.deltaUnits !== undefined) {
+      delta = Number(data.deltaUnits.toFixed(2));
+      newUnits = Math.max(0, Number((targetItem.currentUnits + delta).toFixed(2)));
+    }
+
+    // Determine completion status
+    const isDone =
+      data.markCompleted !== undefined
+        ? data.markCompleted
+        : targetItem.totalUnits > 0 && newUnits >= targetItem.totalUnits;
+
+    if (isDone && !wasAlreadyCompleted) {
+      targetItemCompletedNow = true;
+    }
+
+    const updatedItem: GoalTrackedItem = {
+      ...targetItem,
+      currentUnits: newUnits,
+      status: isDone ? 'completed' : 'in_progress',
+      completedAt: isDone ? (targetItem.completedAt || Date.now()) : undefined,
+      updatedAt: Date.now(),
+    };
+
+    const updatedItems = (existing.items || []).map((item) =>
+      item.id === itemId ? updatedItem : item
+    );
+
+    // Update parent goal currentValue if numeric metric or trackingMode === 'items'
+    let newGoalCurrent = existing.currentValue;
+    if (existing.trackingMode === 'items') {
+      newGoalCurrent = updatedItems.filter((i) => i.status === 'completed').length;
+    } else if (targetItemCompletedNow && existing.metricType === 'numeric') {
+      newGoalCurrent = Math.min(existing.targetValue, existing.currentValue + 1);
+    } else if (!isDone && wasAlreadyCompleted && existing.metricType === 'numeric') {
+      newGoalCurrent = Math.max(0, existing.currentValue - 1);
+    }
+
+    const isGoalCompleted = existing.targetValue > 0 && newGoalCurrent >= existing.targetValue;
+    const goalStatus: GoalStatus = isGoalCompleted
+      ? 'completed'
+      : existing.status === 'completed' && newGoalCurrent < existing.targetValue
+      ? 'in_progress'
+      : existing.status;
+
+    // Create enriched GoalProgressLog entry
+    const entryDate = data.date || getTodayDateString('Asia/Kolkata');
+    const autoNote = data.note?.trim()
+      ? data.note.trim()
+      : isDone
+      ? `Completed "${targetItem.title}"`
+      : `Progress on "${targetItem.title}": ${delta >= 0 ? `+${delta}` : delta} ${targetItem.unitLabel}`;
+
+    const newLog: GoalProgressLog = {
+      id: `prog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      date: entryDate,
+      valueChange: delta,
+      currentValue: newGoalCurrent,
+      note: autoNote,
+      createdAt: Date.now(),
+      itemId: targetItem.id,
+      itemTitle: targetItem.title,
+      unitLabel: targetItem.unitLabel,
+      itemCurrentUnits: newUnits,
+      itemTotalUnits: targetItem.totalUnits,
+    };
+
+    const updatedGoal: LifeGoal = {
+      ...existing,
+      currentValue: newGoalCurrent,
+      status: goalStatus,
+      items: updatedItems,
+      progressLogs: [newLog, ...(existing.progressLogs || [])],
+      updatedAt: Date.now(),
+    };
+
+    const saved = await this.saveGoal(updatedGoal);
+    return {
+      goal: saved,
+      updatedItem,
+      completedNow: targetItemCompletedNow,
+    };
+  }
+
+  static async undoProgressLog(
+    userId: string,
+    goalId: string,
+    logId: string
+  ): Promise<LifeGoal | null> {
+    const all = this.getLocalLifeGoals(userId);
+    const existing = all.find((g) => g.id === goalId);
+    if (!existing) return null;
+
+    const logToUndo = (existing.progressLogs || []).find((l) => l.id === logId);
+    if (!logToUndo) return null;
+
+    const remainingLogs = (existing.progressLogs || []).filter((l) => l.id !== logId);
+
+    let updatedItems = existing.items || [];
+    let newGoalCurrent = existing.currentValue;
+
+    if (logToUndo.itemId) {
+      const item = updatedItems.find((i) => i.id === logToUndo.itemId);
+      if (item) {
+        const revertedUnits = Math.max(0, Number((item.currentUnits - logToUndo.valueChange).toFixed(2)));
+        const wasCompleted = item.status === 'completed';
+        const isStillCompleted = item.totalUnits > 0 && revertedUnits >= item.totalUnits;
+
+        const revertedItem: GoalTrackedItem = {
+          ...item,
+          currentUnits: revertedUnits,
+          status: isStillCompleted ? 'completed' : 'in_progress',
+          completedAt: isStillCompleted ? item.completedAt : undefined,
+          updatedAt: Date.now(),
+        };
+
+        updatedItems = updatedItems.map((i) => (i.id === item.id ? revertedItem : i));
+
+        if (existing.trackingMode === 'items') {
+          newGoalCurrent = updatedItems.filter((i) => i.status === 'completed').length;
+        } else if (wasCompleted && !isStillCompleted && existing.metricType === 'numeric') {
+          newGoalCurrent = Math.max(0, existing.currentValue - 1);
+        }
+      }
+    } else {
+      // Goal-level progress log undo
+      newGoalCurrent = Math.max(0, Number((existing.currentValue - logToUndo.valueChange).toFixed(2)));
+    }
+
+    const isGoalCompleted = existing.targetValue > 0 && newGoalCurrent >= existing.targetValue;
+    const goalStatus: GoalStatus = isGoalCompleted
+      ? 'completed'
+      : existing.status === 'completed' && newGoalCurrent < existing.targetValue
+      ? 'in_progress'
+      : existing.status;
+
+    const updatedGoal: LifeGoal = {
+      ...existing,
+      currentValue: newGoalCurrent,
+      status: goalStatus,
+      items: updatedItems,
+      progressLogs: remainingLogs,
       updatedAt: Date.now(),
     };
 
