@@ -19,6 +19,9 @@ import {
   Radio,
   MapPin,
   TrendingUp,
+  AlertTriangle,
+  RefreshCw,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   SpeedUnit,
@@ -31,6 +34,8 @@ import {
   formatDistance,
   getHeadingCompass,
   getMaxGaugeSpeed,
+  isValidSpeed,
+  formatSpeedValue,
 } from '@/lib/speedometer/speedometer-utils';
 import { ActivityOccurrence } from '@/types/routine';
 import { cn } from '@/lib/utils';
@@ -63,19 +68,32 @@ export function SpeedometerModal({
   const [tripElapsedSeconds, setTripElapsedSeconds] = useState(0);
   const [tripDistanceMeters, setTripDistanceMeters] = useState(0);
   const [maxSpeedMs, setMaxSpeedMs] = useState(0);
-  const [currentSpeedMs, setCurrentSpeedMs] = useState(0);
+  const [currentSpeedMs, setCurrentSpeedMs] = useState<number | null>(null);
   const [currentHeading, setCurrentHeading] = useState<number | null>(null);
   const [currentAltitude, setCurrentAltitude] = useState<number | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<'connecting' | 'connected' | 'error' | 'denied'>('connecting');
+  const [gpsStatus, setGpsStatus] = useState<'connecting' | 'connected' | 'unavailable' | 'denied'>('connecting');
+  const [retryCount, setRetryCount] = useState(0);
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState<string>('');
   const [isSavedToast, setIsSavedToast] = useState(false);
 
   // Moving speed samples for average calculation
   const movingSamplesRef = useRef<{ speed: number; time: number }[]>([]);
   const lastPointRef = useRef<GpsPoint | null>(null);
+  const lastFixTimestampRef = useRef<number | null>(null);
+  const isTripActiveRef = useRef(isTripActive);
+  const maxSpeedMsRef = useRef(maxSpeedMs);
   const watchIdRef = useRef<number | null>(null);
   const wakeLockRef = useRef<any>(null);
+
+  // Keep dynamic values in refs to avoid thrashing watchPosition
+  useEffect(() => {
+    isTripActiveRef.current = isTripActive;
+  }, [isTripActive]);
+
+  useEffect(() => {
+    maxSpeedMsRef.current = maxSpeedMs;
+  }, [maxSpeedMs]);
 
   // Set default selected occurrence to active or first fitness routine
   useEffect(() => {
@@ -134,6 +152,21 @@ export function SpeedometerModal({
     };
   }, [isOpen]);
 
+  // GPS Staleness Watchdog (detects loss of satellite fix > 5s)
+  useEffect(() => {
+    if (!isOpen || isDemoMode) return;
+    const watchdog = setInterval(() => {
+      if (gpsStatus === 'connected' && lastFixTimestampRef.current) {
+        const elapsed = Date.now() - lastFixTimestampRef.current;
+        if (elapsed > 5000) {
+          setGpsStatus('unavailable');
+          setCurrentSpeedMs(null);
+        }
+      }
+    }, 1000);
+    return () => clearInterval(watchdog);
+  }, [isOpen, isDemoMode, gpsStatus]);
+
   // GPS Tracking
   useEffect(() => {
     if (!isOpen || isDemoMode) {
@@ -145,13 +178,15 @@ export function SpeedometerModal({
     }
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGpsStatus('error');
+      setGpsStatus('unavailable');
+      setCurrentSpeedMs(null);
       return;
     }
 
     setGpsStatus('connecting');
 
     const handleSuccess = (position: GeolocationPosition) => {
+      lastFixTimestampRef.current = Date.now();
       setGpsStatus('connected');
       const { latitude, longitude, speed, heading, altitude, accuracy } = position.coords;
       const timestamp = position.timestamp;
@@ -160,9 +195,9 @@ export function SpeedometerModal({
       if (heading !== null && !isNaN(heading)) setCurrentHeading(heading);
       if (altitude !== null && !isNaN(altitude)) setCurrentAltitude(altitude);
 
-      let effectiveSpeedMs = 0;
+      let effectiveSpeedMs: number | null = null;
 
-      if (speed !== null && !isNaN(speed) && speed >= 0) {
+      if (isValidSpeed(speed)) {
         effectiveSpeedMs = speed;
       } else if (lastPointRef.current) {
         // Fallback: calculate speed from delta distance and time
@@ -180,17 +215,25 @@ export function SpeedometerModal({
         }
       }
 
-      // Filter out stationary noise (< 0.4 m/s is ~ 1.4 km/h)
-      if (effectiveSpeedMs < 0.4) effectiveSpeedMs = 0;
+      if (effectiveSpeedMs !== null) {
+        // Filter out stationary noise (< 0.4 m/s is ~ 1.4 km/h)
+        if (effectiveSpeedMs < 0.4) effectiveSpeedMs = 0;
 
-      setCurrentSpeedMs(effectiveSpeedMs);
+        setCurrentSpeedMs(effectiveSpeedMs);
 
-      if (effectiveSpeedMs > maxSpeedMs) {
-        setMaxSpeedMs(effectiveSpeedMs);
+        if (effectiveSpeedMs > maxSpeedMsRef.current) {
+          setMaxSpeedMs(effectiveSpeedMs);
+        }
+
+        if (effectiveSpeedMs > 0.5) {
+          movingSamplesRef.current.push({ speed: effectiveSpeedMs, time: timestamp });
+        }
+      } else {
+        setCurrentSpeedMs(null);
       }
 
       // Add to distance and moving samples if trip is active
-      if (isTripActive && lastPointRef.current) {
+      if (isTripActiveRef.current && lastPointRef.current) {
         const dMeters = calculateDistanceMeters(
           lastPointRef.current.latitude,
           lastPointRef.current.longitude,
@@ -203,32 +246,29 @@ export function SpeedometerModal({
         }
       }
 
-      if (effectiveSpeedMs > 0.5) {
-        movingSamplesRef.current.push({ speed: effectiveSpeedMs, time: timestamp });
-      }
-
       lastPointRef.current = {
         latitude,
         longitude,
         timestamp,
-        speed: effectiveSpeedMs,
+        speed: effectiveSpeedMs !== null ? effectiveSpeedMs : 0,
         accuracy,
         altitude,
       };
     };
 
     const handleError = (error: GeolocationPositionError) => {
+      setCurrentSpeedMs(null);
       if (error.code === error.PERMISSION_DENIED) {
         setGpsStatus('denied');
       } else {
-        setGpsStatus('error');
+        setGpsStatus('unavailable');
       }
     };
 
     watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
       enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 10000,
+      maximumAge: 2000,
+      timeout: 20000,
     });
 
     return () => {
@@ -237,7 +277,7 @@ export function SpeedometerModal({
         watchIdRef.current = null;
       }
     };
-  }, [isOpen, isTripActive, isDemoMode, maxSpeedMs]);
+  }, [isOpen, isDemoMode, retryCount]);
 
   // Demo speed simulation
   useEffect(() => {
@@ -261,9 +301,21 @@ export function SpeedometerModal({
     setTripElapsedSeconds(0);
     setTripDistanceMeters(0);
     setMaxSpeedMs(0);
-    setCurrentSpeedMs(0);
+    if (isDemoMode) {
+      setCurrentSpeedMs(demoSpeedKmh / 3.6);
+    } else if (gpsStatus !== 'connected') {
+      setCurrentSpeedMs(null);
+    }
     movingSamplesRef.current = [];
     lastPointRef.current = null;
+  };
+
+  // Interactive retry GPS handler
+  const handleRetryGps = () => {
+    setGpsStatus('connecting');
+    setCurrentSpeedMs(null);
+    lastFixTimestampRef.current = null;
+    setRetryCount((prev) => prev + 1);
   };
 
   // Log to routine
@@ -287,14 +339,18 @@ export function SpeedometerModal({
 
   // Speed values in current unit
   const displayCurrentSpeed = useMemo(() => {
-    if (unit === 'pace') {
-      return formatPace(convertSpeed(currentSpeedMs, 'pace'));
-    }
-    const val = convertSpeed(currentSpeedMs, unit);
-    return val >= 100 ? Math.round(val).toString() : val.toFixed(1);
-  }, [currentSpeedMs, unit]);
+    const effectiveSpeed = isDemoMode
+      ? currentSpeedMs
+      : gpsStatus === 'connected'
+      ? currentSpeedMs
+      : null;
+    return formatSpeedValue(effectiveSpeed, unit);
+  }, [currentSpeedMs, unit, gpsStatus, isDemoMode]);
 
   const displayMaxSpeed = useMemo(() => {
+    if (maxSpeedMs <= 0) {
+      return unit === 'pace' ? '--:--' : `0.0 ${unit.toUpperCase()}`;
+    }
     if (unit === 'pace') {
       return formatPace(convertSpeed(maxSpeedMs, 'pace'));
     }
@@ -311,7 +367,10 @@ export function SpeedometerModal({
     return `${val.toFixed(1)} ${unit.toUpperCase()}`;
   }, [tripDistanceMeters, tripElapsedSeconds, unit]);
 
-  const currentSpeedKmh = currentSpeedMs * 3.6;
+  const currentSpeedKmh =
+    (isDemoMode || gpsStatus === 'connected') && currentSpeedMs !== null
+      ? currentSpeedMs * 3.6
+      : 0;
   const maxGaugeSpeed = getMaxGaugeSpeed(mode, maxSpeedMs * 3.6);
 
   // SVG Gauge Dial Calculations (240 degree sweep from 150 deg to 390 deg)
@@ -392,8 +451,16 @@ export function SpeedometerModal({
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
                     Acquiring GPS...
                   </span>
+                ) : gpsStatus === 'denied' ? (
+                  <span className="text-amber-400 font-medium flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                    Permission Denied
+                  </span>
                 ) : (
-                  <span className="text-rose-400 font-medium">GPS Signal Unavailable</span>
+                  <span className="text-rose-400 font-medium flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    GPS signal not available
+                  </span>
                 )}
               </div>
             </div>
@@ -456,8 +523,16 @@ export function SpeedometerModal({
                 type="button"
                 id="btn-toggle-demo-speedometer"
                 onClick={() => {
-                  setIsDemoMode(!isDemoMode);
-                  if (!isDemoMode && demoSpeedKmh === 0) setDemoSpeedKmh(42);
+                  const nextMode = !isDemoMode;
+                  setIsDemoMode(nextMode);
+                  if (nextMode) {
+                    if (demoSpeedKmh === 0) setDemoSpeedKmh(42);
+                  } else {
+                    setCurrentSpeedMs(null);
+                    setGpsStatus('connecting');
+                    lastFixTimestampRef.current = null;
+                    setRetryCount((prev) => prev + 1);
+                  }
                 }}
                 className={cn(
                   'px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer flex items-center gap-1.5',
@@ -608,15 +683,103 @@ export function SpeedometerModal({
             </svg>
 
             {/* Huge Center Digital Readout */}
-            <div className="absolute top-[52%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-              <span className="block text-6xl sm:text-7xl font-black text-white tracking-tighter tabular-nums drop-shadow-md">
+            <div className="absolute top-[52%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none w-full px-4 flex flex-col items-center">
+              <span
+                id="speedometer-digital-readout"
+                data-testid="speedometer-digital-readout"
+                className="block text-6xl sm:text-7xl font-black text-white tracking-tighter tabular-nums drop-shadow-md"
+              >
                 {displayCurrentSpeed}
               </span>
               <span className="block text-xs sm:text-sm font-extrabold uppercase tracking-widest text-cyan-400 mt-0.5">
                 {unit === 'kmh' ? 'KM / H' : unit === 'pace' ? 'MIN / KM' : unit.toUpperCase()}
               </span>
+              {gpsStatus === 'unavailable' && !isDemoMode && (
+                <div
+                  id="speedometer-center-unavailable-badge"
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-bold animate-in fade-in"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span>GPS signal not available</span>
+                </div>
+              )}
+              {gpsStatus === 'denied' && !isDemoMode && (
+                <div
+                  id="speedometer-center-denied-badge"
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-300 text-xs font-bold animate-in fade-in"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Location Permission Denied</span>
+                </div>
+              )}
+              {gpsStatus === 'connecting' && !isDemoMode && (
+                <div
+                  id="speedometer-center-connecting-badge"
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-semibold animate-pulse"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin shrink-0" />
+                  <span>Acquiring GPS signal...</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* GPS Error & Retry Banner (when signal unavailable or permission denied) */}
+          {gpsStatus === 'unavailable' && !isDemoMode && (
+            <div
+              id="speedometer-gps-unavailable-banner"
+              className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 flex items-center justify-between gap-3 animate-in fade-in"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-bold text-rose-200">GPS signal not available</div>
+                  <div className="text-[11px] text-rose-300/80">
+                    Ensure device location is enabled and you have a clear sky view.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="btn-retry-gps"
+                onClick={handleRetryGps}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition active:scale-95 cursor-pointer shrink-0 flex items-center gap-1.5 shadow-md shadow-rose-900/30"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry GPS</span>
+              </button>
+            </div>
+          )}
+
+          {gpsStatus === 'denied' && !isDemoMode && (
+            <div
+              id="speedometer-gps-denied-banner"
+              className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/30 flex items-center justify-between gap-3 animate-in fade-in"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-bold text-amber-200">Location Permission Denied</div>
+                  <div className="text-[11px] text-amber-300/80">
+                    Allow location access in your device or browser settings.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="btn-retry-gps"
+                onClick={handleRetryGps}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition active:scale-95 cursor-pointer shrink-0 flex items-center gap-1.5 shadow-md shadow-amber-900/30"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            </div>
+          )}
 
           {/* 4-Stat Metric Cards Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">

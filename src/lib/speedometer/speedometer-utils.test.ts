@@ -7,6 +7,8 @@ import {
   formatDistance,
   getHeadingCompass,
   getMaxGaugeSpeed,
+  isValidSpeed,
+  formatSpeedValue,
 } from './speedometer-utils';
 
 describe('Speedometer Utilities', () => {
@@ -76,4 +78,45 @@ describe('Speedometer Utilities', () => {
       expect(getMaxGaugeSpeed('auto', 70)).toBe(140);
     });
   });
+
+  describe('isValidSpeed', () => {
+    it('returns true for non-negative finite numbers', () => {
+      expect(isValidSpeed(0)).toBe(true);
+      expect(isValidSpeed(12.5)).toBe(true);
+      expect(isValidSpeed(0.001)).toBe(true);
+    });
+
+    it('returns false for invalid, null, undefined, or negative values', () => {
+      expect(isValidSpeed(null)).toBe(false);
+      expect(isValidSpeed(undefined)).toBe(false);
+      expect(isValidSpeed(NaN)).toBe(false);
+      expect(isValidSpeed(Infinity)).toBe(false);
+      expect(isValidSpeed(-1)).toBe(false);
+    });
+  });
+
+  describe('formatSpeedValue', () => {
+    it('formats valid speeds in kmh, mph, and ms', () => {
+      expect(formatSpeedValue(10, 'kmh')).toBe('36.0');
+      expect(formatSpeedValue(10, 'ms')).toBe('10.0');
+      expect(formatSpeedValue(0, 'kmh')).toBe('0.0');
+    });
+
+    it('rounds values >= 100 to whole integers', () => {
+      expect(formatSpeedValue(30, 'kmh')).toBe('108'); // 30 * 3.6 = 108
+    });
+
+    it('returns -- for invalid or null speeds', () => {
+      expect(formatSpeedValue(null, 'kmh')).toBe('--');
+      expect(formatSpeedValue(undefined, 'kmh')).toBe('--');
+      expect(formatSpeedValue(NaN, 'kmh')).toBe('--');
+      expect(formatSpeedValue(-5, 'kmh')).toBe('--');
+    });
+
+    it('returns --:-- for pace when speed is null or invalid', () => {
+      expect(formatSpeedValue(null, 'pace')).toBe('--:--');
+      expect(formatSpeedValue(0, 'pace')).toBe('--:--');
+    });
+  });
 });
+

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   generateNotificationId,
   isQuietHour,
@@ -36,7 +36,8 @@ describe('Native Local Notification Manager', () => {
 
   it('computes 72-hour rolling notification schedule from routine templates', () => {
     // Generate schedule for future dates
-    const baseDate = '2026-10-20';
+    const baseDate = '2030-01-01';
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2030-01-01T00:00:00.000Z').getTime());
     const schedule = NotificationManager.compute72HourSchedule(
       templates,
       [],
@@ -72,7 +73,8 @@ describe('Native Local Notification Manager', () => {
       notifications: [{ id: 'notif_late', type: 'start' as const, offsetMinutes: 0, enabled: true }],
     };
 
-    const baseDate = '2026-10-20';
+    const baseDate = '2030-01-01';
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2030-01-01T00:00:00.000Z').getTime());
     const scheduleWithQuiet = NotificationManager.compute72HourSchedule(
       [lateNightTemplate],
       [],
