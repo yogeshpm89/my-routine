@@ -101,4 +101,88 @@ describe('AnalyticsCalculator Engine', () => {
     expect(fullmoon?.plannedMinutes).toBe(30);
     expect(fullmoon?.targetMinutes).toBe(120);
   });
+
+  it('aggregates manual goal progress entries into actual minutes and fulfillment', () => {
+    const occurrences = generateDailyOccurrences(templates, [], [], mondayDate);
+    // Add 15 km cycling (45 min) to cycling goal (target 120 min)
+    // Add 2 topics (30 min) to unscheduled coursera goal (target 30 min)
+    const progressEntries = [
+      {
+        id: 'entry-cycling-1',
+        userId,
+        goalId: 'goal_cycling_exercise',
+        date: mondayDate,
+        amount: 15,
+        unit: 'km' as const,
+        minutes: 45,
+        durationMinutes: 45,
+        note: '',
+        source: 'manual' as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+      {
+        id: 'entry-coursera-1',
+        userId,
+        goalId: 'goal_coursera',
+        date: mondayDate,
+        amount: 2,
+        unit: 'topics' as const,
+        minutes: 30,
+        durationMinutes: 30,
+        note: '',
+        source: 'quick_add' as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+      // Out of range entry
+      {
+        id: 'entry-old',
+        userId,
+        goalId: 'goal_cycling_exercise',
+        date: '2026-10-18',
+        amount: 10,
+        unit: 'km' as const,
+        minutes: 30,
+        durationMinutes: 30,
+        note: '',
+        source: 'manual' as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    const summary = AnalyticsCalculator.computeSummary(
+      occurrences,
+      goals,
+      'day',
+      mondayDate,
+      mondayDate,
+      progressEntries
+    );
+
+    // Coursera should now be achieved via manual entries even without scheduled blocks
+    const coursera = summary.goalFulfillments.find((g) => g.goal.id === 'goal_coursera');
+    expect(coursera).toBeDefined();
+    expect(coursera?.status).toBe('achieved');
+    expect(coursera?.manualMinutes).toBe(30);
+    expect(coursera?.actualMinutes).toBe(30);
+    expect(coursera?.fulfillmentPercentage).toBe(100);
+
+    // Cycling should have 45 min actual out of 120 target => 37.5%
+    const cycling = summary.goalFulfillments.find((g) => g.goal.id === 'goal_cycling_exercise');
+    expect(cycling).toBeDefined();
+    expect(cycling?.manualMinutes).toBe(45);
+    expect(cycling?.actualMinutes).toBe(45);
+    expect(cycling?.fulfillmentPercentage).toBe(37.5);
+    expect(cycling?.deficitMinutes).toBe(75);
+
+    // Total actual minutes must include 45 + 30 = 75 manual minutes
+    expect(summary.totalActualMinutes).toBeGreaterThanOrEqual(75);
+
+    // Fitness category should include the 45 manual minutes
+    const fitnessCat = summary.categoryBreakdown.find((c) => c.category === 'fitness');
+    expect(fitnessCat).toBeDefined();
+    expect(fitnessCat!.actualMinutes).toBeGreaterThanOrEqual(45);
+  });
 });

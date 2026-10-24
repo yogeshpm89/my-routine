@@ -4,6 +4,7 @@ import { LogRepository } from '@/lib/repositories/log-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
 import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import { DayTemplateRepository } from '@/lib/repositories/day-template-repository';
+import { GoalProgressRepository } from '@/lib/repositories/goal-progress-repository';
 import { MutationQueue } from '@/lib/sync/mutation-queue';
 import { getInitialRoutineTemplates, getInitialGoalTargets } from '@/lib/seed-data';
 import { getInitialLifeGoals } from '@/lib/seed-goals';
@@ -17,6 +18,7 @@ import {
 } from '@/types/routine';
 import { LifeGoal } from '@/types/goals';
 import { DayRoutineTemplate, WeeklyPlannerConfig } from '@/types/routine-templates';
+import { GoalProgressEntry } from '@/types/goal-progress';
 
 export interface RoutineBackupPackage {
   version: '1.0' | '1.1';
@@ -29,6 +31,7 @@ export interface RoutineBackupPackage {
   lifeGoals?: LifeGoal[];
   dayTemplates?: DayRoutineTemplate[];
   weeklyPlanner?: WeeklyPlannerConfig;
+  goalProgress?: GoalProgressEntry[];
 }
 
 export class BackupService {
@@ -40,6 +43,7 @@ export class BackupService {
     const lifeGoals = LifeGoalRepository.getLocalLifeGoals(userId);
     const dayTemplates = DayTemplateRepository.getLocalTemplates(userId);
     const weeklyPlanner = DayTemplateRepository.getLocalWeeklyPlanner(userId);
+    const goalProgress = GoalProgressRepository.getLocalEntries(userId);
 
     return {
       version: '1.1',
@@ -52,6 +56,7 @@ export class BackupService {
       lifeGoals,
       dayTemplates,
       weeklyPlanner,
+      goalProgress,
     };
   }
 
@@ -80,6 +85,7 @@ export class BackupService {
       logs: number;
       goals: number;
       dayTemplates?: number;
+      goalProgress?: number;
     };
   } {
     try {
@@ -214,6 +220,25 @@ export class BackupService {
           }
         });
         DayTemplateRepository.saveLocalTemplates(userId, mergedDayTemplates);
+
+        // Merge goal progress entries
+        if (data.goalProgress && Array.isArray(data.goalProgress)) {
+          const existingProgress = GoalProgressRepository.getLocalEntries(userId);
+          const mergedProgress = [...existingProgress];
+          data.goalProgress.forEach((p) => {
+            const entryWithUser = { ...p, userId };
+            const idx = mergedProgress.findIndex((item) => item.id === entryWithUser.id);
+            if (idx >= 0) {
+              mergedProgress[idx] = entryWithUser;
+            } else {
+              mergedProgress.push(entryWithUser);
+            }
+            if (canSyncWithFirestore(userId)) {
+              GoalProgressRepository.addEntry(entryWithUser).catch(console.warn);
+            }
+          });
+          GoalProgressRepository.saveLocalEntries(userId, mergedProgress);
+        }
       }
 
       return {
@@ -224,6 +249,7 @@ export class BackupService {
           logs: data.logs?.length || 0,
           goals: data.goals?.length || 0,
           dayTemplates: preparedDayTemplates.length,
+          goalProgress: data.goalProgress?.length || 0,
         },
       };
     } catch (err: any) {
@@ -247,6 +273,7 @@ export class BackupService {
     LifeGoalRepository.saveLocalLifeGoals(userId, initialLifeGoals);
     DayTemplateRepository.saveLocalTemplates(userId, initialDayTemplates);
     DayTemplateRepository.saveLocalWeeklyPlanner(userId, initialPlanner);
+    GoalProgressRepository.saveLocalEntries(userId, []);
     MutationQueue.clear(userId);
 
     if (canSyncWithFirestore(userId)) {
@@ -264,13 +291,14 @@ export class BackupService {
     const existingGoals = GoalRepository.getLocalGoals(userId);
     const existingLifeGoals = LifeGoalRepository.getLocalLifeGoals(userId);
     const existingDayTemplates = DayTemplateRepository.getLocalTemplates(userId);
+    const existingProgress = GoalProgressRepository.getLocalEntries(userId);
 
     RoutineRepository.saveLocalTemplates(userId, []);
     OverrideRepository.saveLocalOverrides(userId, []);
     LogRepository.saveLocalLogs(userId, []);
     GoalRepository.saveLocalGoals(userId, []);
     LifeGoalRepository.saveLocalLifeGoals(userId, []);
-    DayTemplateRepository.saveLocalTemplates(userId, []);
+    GoalProgressRepository.saveLocalEntries(userId, []);
     DayTemplateRepository.saveLocalWeeklyPlanner(userId, {
       userId,
       assignments: {},
@@ -286,6 +314,7 @@ export class BackupService {
       existingGoals.forEach((g) => GoalRepository.deleteGoal(userId, g.id).catch(console.warn));
       existingLifeGoals.forEach((g) => LifeGoalRepository.deleteGoal(userId, g.id).catch(console.warn));
       existingDayTemplates.forEach((dt) => DayTemplateRepository.deleteTemplate(userId, dt.id).catch(console.warn));
+      existingProgress.forEach((p) => GoalProgressRepository.deleteEntry(userId, p.id).catch(console.warn));
     }
   }
 }

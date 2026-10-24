@@ -8,7 +8,8 @@ export type SyncCollection =
   | 'ai_executions'
   | 'life_goals'
   | 'day_templates'
-  | 'weekly_planner';
+  | 'weekly_planner'
+  | 'goal_progress';
 export type SyncAction = 'set' | 'delete';
 
 export interface SyncMutation {

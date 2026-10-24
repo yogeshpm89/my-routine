@@ -1,4 +1,5 @@
 import { ActivityOccurrence, ActivityLog, GoalTarget, ActivityCategory } from '@/types/routine';
+import { GoalProgressEntry } from '@/types/goal-progress';
 import { formatDuration } from '@/lib/time-utils';
 
 export interface CategoryAnalytics {
@@ -14,6 +15,7 @@ export interface GoalFulfillment {
   targetMinutes: number;
   plannedMinutes: number;
   actualMinutes: number;
+  manualMinutes?: number;
   fulfillmentPercentage: number;
   status: 'achieved' | 'on_track' | 'under_target' | 'unscheduled';
   deficitMinutes: number;
@@ -45,7 +47,8 @@ export class AnalyticsCalculator {
     goals: GoalTarget[],
     timeframe: 'day' | 'week',
     startDate: string,
-    endDate: string
+    endDate: string,
+    progressEntries: GoalProgressEntry[] = []
   ): RoutineAnalyticsSummary {
     let totalPlannedMinutes = 0;
     let totalActualMinutes = 0;
@@ -95,6 +98,30 @@ export class AnalyticsCalculator {
       });
     }
 
+    // Incorporate manual goal progress entries
+    const inRangeEntries = progressEntries.filter(
+      (e) => e.date >= startDate && e.date <= endDate
+    );
+    const totalManualMinutes = inRangeEntries.reduce(
+      (sum, e) => sum + (e.durationMinutes ?? e.minutes ?? 0),
+      0
+    );
+    totalActualMinutes += totalManualMinutes;
+
+    for (const entry of inRangeEntries) {
+      const targetGoal = goals.find((g) => g.id === entry.goalId);
+      if (targetGoal && targetGoal.categories.length > 0) {
+        const cat = targetGoal.categories[0] as ActivityCategory;
+        const entryMins = entry.durationMinutes ?? entry.minutes ?? 0;
+        const existing = categoryMap.get(cat) || { planned: 0, actual: 0, count: 0 };
+        categoryMap.set(cat, {
+          planned: existing.planned,
+          actual: existing.actual + entryMins,
+          count: existing.count + 1,
+        });
+      }
+    }
+
     const totalOccurrences = occurrences.filter((o) => !o.isCancelled).length;
     const completionRate =
       totalOccurrences > 0
@@ -133,7 +160,7 @@ export class AnalyticsCalculator {
       if (goal.isArchived) continue;
 
       let planned = 0;
-      let actual = 0;
+      let routineActual = 0;
 
       for (const occ of occurrences) {
         if (occ.isCancelled) continue;
@@ -151,20 +178,28 @@ export class AnalyticsCalculator {
           planned += occ.durationMinutes;
           const occLog = occ.log;
           if (occLog?.actualDurationMinutes && occLog.actualDurationMinutes > 0) {
-            actual += occLog.actualDurationMinutes;
+            routineActual += occLog.actualDurationMinutes;
           } else if (occLog?.status === 'completed') {
-            actual += occ.durationMinutes;
+            routineActual += occ.durationMinutes;
           } else if (occLog?.status === 'partial') {
-            actual += Math.round(occ.durationMinutes * 0.5);
+            routineActual += Math.round(occ.durationMinutes * 0.5);
           }
         }
       }
+
+      // Add manual progress entries for this goal
+      const goalEntries = inRangeEntries.filter((e) => e.goalId === goal.id);
+      const manualMinutes = goalEntries.reduce(
+        (sum, e) => sum + (e.durationMinutes ?? e.minutes ?? 0),
+        0
+      );
+      const actual = routineActual + manualMinutes;
 
       const activeDaysCount = timeframe === 'week' ? goal.activeDays.length : 1;
       const targetMins = goal.targetMinutes * activeDaysCount;
 
       const fulfillmentPercentage =
-        targetMins > 0 ? Math.min(150, Math.round((actual / targetMins) * 100)) : 0;
+        targetMins > 0 ? Math.min(150, Math.round((actual / targetMins) * 1000) / 10) : 0;
 
       let status: 'achieved' | 'on_track' | 'under_target' | 'unscheduled' = 'under_target';
       if (planned === 0 && actual === 0) {
@@ -182,6 +217,7 @@ export class AnalyticsCalculator {
         targetMinutes: targetMins,
         plannedMinutes: planned,
         actualMinutes: actual,
+        manualMinutes,
         fulfillmentPercentage,
         status,
         deficitMinutes: deficit,

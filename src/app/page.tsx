@@ -15,6 +15,8 @@ import { RoutineRepository } from '@/lib/repositories/routine-repository';
 import { OverrideRepository } from '@/lib/repositories/override-repository';
 import { LogRepository } from '@/lib/repositories/log-repository';
 import { GoalRepository } from '@/lib/repositories/goal-repository';
+import { GoalProgressRepository } from '@/lib/repositories/goal-progress-repository';
+import { GoalProgressEntry, GoalTrackingUnit } from '@/types/goal-progress';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { detectScheduleConflicts } from '@/lib/conflict-detector';
 import {
@@ -106,6 +108,7 @@ export default function RoutineApp() {
   const [overrides, setOverrides] = useState<OccurrenceOverride[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [goals, setGoals] = useState<GoalTarget[]>([]);
+  const [goalProgress, setGoalProgress] = useState<GoalProgressEntry[]>([]);
   const [lifeGoals, setLifeGoals] = useState<LifeGoal[]>([]);
   const [dayTemplates, setDayTemplates] = useState<DayRoutineTemplate[]>([]);
   const [weeklyPlanner, setWeeklyPlanner] = useState<WeeklyPlannerConfig | null>(null);
@@ -198,7 +201,7 @@ export default function RoutineApp() {
     if (authLoading || !userId) return;
     setIsLoading(true);
     try {
-      const [tList, oList, lList, gList, lgList, dtList, pln] = await Promise.all([
+      const [tList, oList, lList, gList, lgList, dtList, pln, gpList] = await Promise.all([
         RoutineRepository.getTemplates(userId),
         OverrideRepository.getOverridesForDate(userId, selectedDate),
         LogRepository.getLogsForDate(userId, selectedDate),
@@ -206,6 +209,7 @@ export default function RoutineApp() {
         LifeGoalRepository.getLifeGoals(userId),
         DayTemplateRepository.getTemplates(userId),
         DayTemplateRepository.getWeeklyPlanner(userId),
+        GoalProgressRepository.getProgressEntries(userId),
       ]);
       setTemplates(tList);
       setOverrides(oList);
@@ -214,6 +218,7 @@ export default function RoutineApp() {
       setLifeGoals(lgList);
       setDayTemplates(dtList);
       setWeeklyPlanner(pln);
+      setGoalProgress(gpList);
     } catch (err) {
       console.error('Failed to load routine data:', err);
     } finally {
@@ -230,6 +235,7 @@ export default function RoutineApp() {
     setOverrides(OverrideRepository.getLocalOverrides(userId));
     setLogs(LogRepository.getLocalLogs(userId));
     setGoals(GoalRepository.getLocalGoals(userId));
+    setGoalProgress(GoalProgressRepository.getLocalProgress(userId));
     setLifeGoals(LifeGoalRepository.getLocalLifeGoals(userId));
     setDayTemplates(DayTemplateRepository.getLocalTemplates(userId));
     setWeeklyPlanner(DayTemplateRepository.getLocalWeeklyPlanner(userId));
@@ -254,6 +260,10 @@ export default function RoutineApp() {
       setGoals(newGoals);
     });
 
+    const unsubGoalProgress = GoalProgressRepository.subscribeProgress(userId, (newEntries) => {
+      setGoalProgress(newEntries);
+    });
+
     const unsubLifeGoals = LifeGoalRepository.subscribeLifeGoals(userId, (newLifeGoals) => {
       setLifeGoals(newLifeGoals);
     });
@@ -274,6 +284,7 @@ export default function RoutineApp() {
       unsubOverrides();
       unsubLogs();
       unsubGoals();
+      unsubGoalProgress();
       unsubLifeGoals();
       unsubConflicts();
       unsubSyncState();
@@ -296,6 +307,44 @@ export default function RoutineApp() {
   const handleDeleteGoal = async (goalId: string) => {
     await GoalRepository.deleteGoal(userId, goalId);
     showToast('Deleted goal target');
+  };
+
+  const handleRecordGoalProgress = async (params: {
+    goalId: string;
+    amount: number;
+    unit: GoalTrackingUnit;
+    durationMinutes: number;
+    notes?: string;
+    source?: 'manual' | 'quick_add';
+  }) => {
+    if (!userId) return;
+    const entry = await GoalProgressRepository.addEntry({
+      userId,
+      goalId: params.goalId,
+      date: selectedDate,
+      amount: params.amount,
+      unit: params.unit,
+      durationMinutes: params.durationMinutes,
+      notes: params.notes,
+      source: params.source,
+    });
+    setGoalProgress((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
+  };
+
+  const handleDeleteGoalProgress = async (entryId: string) => {
+    if (!userId) return;
+    await GoalProgressRepository.deleteEntry(userId, entryId);
+    setGoalProgress((prev) => prev.filter((e) => e.id !== entryId));
+    showToast('Progress entry deleted');
+  };
+
+  const handleUndoLastGoalProgress = async (goalId: string, date: string) => {
+    if (!userId) return;
+    const undone = await GoalProgressRepository.undoLastEntry(userId, goalId, date);
+    if (undone) {
+      setGoalProgress((prev) => prev.filter((e) => e.id !== undone.id));
+      showToast('Last progress entry undone');
+    }
   };
 
   const handleSaveLifeGoal = async (goal: LifeGoal) => {
@@ -1634,6 +1683,10 @@ export default function RoutineApp() {
                 activeDayTemplate={activeDayTemplate}
                 allDayTemplates={dayTemplates}
                 onQuickSwitchTemplate={handleQuickSwitchTodayTemplate}
+                dailyGoals={goals}
+                goalProgress={goalProgress}
+                onRecordGoalProgress={handleRecordGoalProgress}
+                onUndoLastGoalProgress={handleUndoLastGoalProgress}
               />
             </>
           )}
@@ -1720,8 +1773,12 @@ export default function RoutineApp() {
               overrides={overrides}
               logs={logs}
               goals={goals}
+              goalProgress={goalProgress}
               onSaveGoal={handleSaveGoal}
               onDeleteGoal={handleDeleteGoal}
+              onRecordGoalProgress={handleRecordGoalProgress}
+              onDeleteGoalProgress={handleDeleteGoalProgress}
+              onUndoLastGoalProgress={handleUndoLastGoalProgress}
             />
           )}
 
