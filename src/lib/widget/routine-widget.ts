@@ -113,7 +113,15 @@ export async function syncOccurrencesToWidget(
     let currentActivityTime = '';
     let statusText = '';
 
-    if (activeOccurrence) {
+    if (isAllCompleted) {
+      currentActivityTitle = 'All routines completed!';
+      currentActivityTime = 'Great job today!';
+      statusText = '100% Done';
+    } else if (isAllSkipped) {
+      currentActivityTitle = 'Routine skipped for today';
+      currentActivityTime = 'Holiday / Weekend rest';
+      statusText = 'Skipped';
+    } else if (activeOccurrence) {
       currentActivityTitle = activeOccurrence.title;
       currentActivityTime = `${formatTime12Hour(activeOccurrence.startTime)} - ${formatTime12Hour(activeOccurrence.endTime)}`;
       const st = activeOccurrence.log?.status;
@@ -122,14 +130,6 @@ export async function syncOccurrencesToWidget(
       else if (st === 'skipped') statusText = 'Skipped';
       else if (currentOccurrence) statusText = 'Active Now';
       else statusText = 'Upcoming';
-    } else if (isAllCompleted) {
-      currentActivityTitle = 'All routines completed!';
-      currentActivityTime = 'Great job today!';
-      statusText = '100% Done';
-    } else if (isAllSkipped) {
-      currentActivityTitle = 'Routine skipped for today';
-      currentActivityTime = 'Holiday / Weekend rest';
-      statusText = 'Skipped';
     }
 
     const payload: RoutineWidgetData = {

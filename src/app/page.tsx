@@ -54,6 +54,10 @@ import { SkipCompleteRoutineModal } from '@/components/routine/skip-complete-rou
 import { LifeGoal, GoalTrackedItem, GoalExperienceEntry } from '@/types/goals';
 import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import { GoalsDashboard } from '@/components/goals/goals-dashboard';
+import { DayRoutineTemplate, WeeklyPlannerConfig } from '@/types/routine-templates';
+import { DayTemplateRepository } from '@/lib/repositories/day-template-repository';
+import { DayTemplateResolver } from '@/lib/templates/day-template-resolver';
+import { TemplatesDashboard } from '@/components/templates/templates-dashboard';
 import { syncOccurrencesToWidget } from '@/lib/widget/routine-widget';
 import { SpeedometerModal } from '@/components/speedometer/speedometer-modal';
 import {
@@ -74,6 +78,7 @@ import {
   Menu,
   Target,
   Gauge,
+  Layers,
 } from 'lucide-react';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { canSyncWithFirestore } from '@/lib/firebase/config';
@@ -91,7 +96,7 @@ export default function RoutineApp() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
 
   const [selectedDate, setSelectedDate] = useState<string>('2026-10-15');
-  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month' | 'goals' | 'ai' | 'analytics' | 'settings'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month' | 'goals' | 'templates' | 'ai' | 'analytics' | 'settings'>('today');
 
   useEffect(() => {
     setSelectedDate(getTodayDateString('Asia/Kolkata'));
@@ -102,6 +107,8 @@ export default function RoutineApp() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [goals, setGoals] = useState<GoalTarget[]>([]);
   const [lifeGoals, setLifeGoals] = useState<LifeGoal[]>([]);
+  const [dayTemplates, setDayTemplates] = useState<DayRoutineTemplate[]>([]);
+  const [weeklyPlanner, setWeeklyPlanner] = useState<WeeklyPlannerConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Modal states
@@ -191,18 +198,22 @@ export default function RoutineApp() {
     if (authLoading || !userId) return;
     setIsLoading(true);
     try {
-      const [tList, oList, lList, gList, lgList] = await Promise.all([
+      const [tList, oList, lList, gList, lgList, dtList, pln] = await Promise.all([
         RoutineRepository.getTemplates(userId),
         OverrideRepository.getOverridesForDate(userId, selectedDate),
         LogRepository.getLogsForDate(userId, selectedDate),
         GoalRepository.getGoals(userId),
         LifeGoalRepository.getLifeGoals(userId),
+        DayTemplateRepository.getTemplates(userId),
+        DayTemplateRepository.getWeeklyPlanner(userId),
       ]);
       setTemplates(tList);
       setOverrides(oList);
       setLogs(lList);
       setGoals(gList);
       setLifeGoals(lgList);
+      setDayTemplates(dtList);
+      setWeeklyPlanner(pln);
     } catch (err) {
       console.error('Failed to load routine data:', err);
     } finally {
@@ -220,6 +231,8 @@ export default function RoutineApp() {
     setLogs(LogRepository.getLocalLogs(userId));
     setGoals(GoalRepository.getLocalGoals(userId));
     setLifeGoals(LifeGoalRepository.getLocalLifeGoals(userId));
+    setDayTemplates(DayTemplateRepository.getLocalTemplates(userId));
+    setWeeklyPlanner(DayTemplateRepository.getLocalWeeklyPlanner(userId));
     setIsLoading(false);
 
     if (!isCloudSynced) return;
@@ -703,15 +716,89 @@ export default function RoutineApp() {
     }
   };
 
+  // Day Routine Template & Weekly Planner Handlers
+  const handleSaveDayTemplate = async (template: DayRoutineTemplate) => {
+    const saved = await DayTemplateRepository.saveTemplate(template);
+    setDayTemplates((prev) => {
+      const idx = prev.findIndex((t) => t.id === saved.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = saved;
+        return copy;
+      }
+      return [...prev, saved];
+    });
+    const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+    NotificationManager.reconcileNotifications(
+      userId,
+      templates,
+      overrides,
+      prefs,
+      logs,
+      dayTemplates,
+      weeklyPlanner || undefined
+    );
+  };
+
+  const handleDeleteDayTemplate = async (templateId: string) => {
+    await DayTemplateRepository.deleteTemplate(userId, templateId);
+    setDayTemplates((prev) => prev.filter((t) => t.id !== templateId));
+  };
+
+  const handleDuplicateDayTemplate = async (template: DayRoutineTemplate) => {
+    const duplicated = await DayTemplateRepository.duplicateTemplate(userId, template.id);
+    setDayTemplates((prev) => [...prev, duplicated]);
+  };
+
+  const handleSaveWeeklyPlanner = async (config: WeeklyPlannerConfig) => {
+    const saved = await DayTemplateRepository.saveWeeklyPlanner(config);
+    setWeeklyPlanner(saved);
+    const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+    NotificationManager.reconcileNotifications(
+      userId,
+      templates,
+      overrides,
+      prefs,
+      logs,
+      dayTemplates,
+      saved
+    );
+  };
+
+  const handleQuickSwitchTodayTemplate = async (templateId: string) => {
+    if (!userId) return;
+    const updated = await DayTemplateRepository.setDateOverride(userId, selectedDate, templateId);
+    setWeeklyPlanner(updated);
+    showToast('Applied routine template to date ✓');
+    const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+    NotificationManager.reconcileNotifications(
+      userId,
+      templates,
+      overrides,
+      prefs,
+      logs,
+      dayTemplates,
+      updated
+    );
+  };
+
   // Reconcile native 72-hour notifications upon routine updates and logs
   useEffect(() => {
     if (!isAuthenticated || !userId) return;
     NotificationManager.initialize(userId);
-    if (templates.length > 0) {
+    if (templates.length > 0 || dayTemplates.length > 0) {
       const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
-      NotificationManager.reconcileNotifications(userId, templates, overrides, prefs, logs);
+      NotificationManager.reconcileNotifications(
+        userId,
+        templates,
+        overrides,
+        prefs,
+        logs,
+        dayTemplates,
+        weeklyPlanner || undefined
+      );
     }
-  }, [userId, templates, overrides, logs, isAuthenticated]);
+  }, [userId, templates, overrides, logs, dayTemplates, weeklyPlanner, isAuthenticated]);
 
   // Refresh rolling 72-hour notifications when app gains focus or returns from background
   useEffect(() => {
@@ -722,8 +809,18 @@ export default function RoutineApp() {
         const curTemplates = RoutineRepository.getLocalTemplates(userId);
         const curOverrides = OverrideRepository.getLocalOverrides(userId);
         const curLogs = LogRepository.getLocalLogs(userId);
+        const curDayTemplates = DayTemplateRepository.getLocalTemplates(userId);
+        const curPlanner = DayTemplateRepository.getLocalWeeklyPlanner(userId);
         const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
-        NotificationManager.reconcileNotifications(userId, curTemplates, curOverrides, prefs, curLogs);
+        NotificationManager.reconcileNotifications(
+          userId,
+          curTemplates,
+          curOverrides,
+          prefs,
+          curLogs,
+          curDayTemplates,
+          curPlanner
+        );
       }
     };
 
@@ -736,8 +833,25 @@ export default function RoutineApp() {
     };
   }, [userId, isAuthenticated]);
 
+  // Resolve active day template and constituent blocks according to precedence
+  const resolvedTemplateInfo =
+    weeklyPlanner && dayTemplates.length > 0
+      ? DayTemplateResolver.resolveTemplateForDate(selectedDate, weeklyPlanner, dayTemplates)
+      : null;
+  const activeDayTemplate = resolvedTemplateInfo?.template || null;
+
+  const resolvedBlocks =
+    weeklyPlanner && dayTemplates.length > 0
+      ? DayTemplateResolver.resolveBlocksForDate(selectedDate, weeklyPlanner, dayTemplates)
+      : templates;
+
   // Generate computed occurrences for the day
-  const occurrences = generateDailyOccurrences(templates, overrides, logs, selectedDate);
+  const occurrences = generateDailyOccurrences(
+    resolvedBlocks.length > 0 ? resolvedBlocks : templates,
+    overrides,
+    logs,
+    selectedDate
+  );
   const dayOfWeek = getDayOfWeek(selectedDate);
   const conflicts = detectScheduleConflicts(occurrences, goals, dayOfWeek);
   const dayInfo = HolidayService.getDayTypeInfo(userId, selectedDate);
@@ -746,13 +860,17 @@ export default function RoutineApp() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const todayStr = getTodayDateString('Asia/Kolkata');
+    const todayBlocks =
+      weeklyPlanner && dayTemplates.length > 0
+        ? DayTemplateResolver.resolveBlocksForDate(todayStr, weeklyPlanner, dayTemplates)
+        : templates;
     const todayOccurrences =
       selectedDate === todayStr
         ? occurrences
-        : generateDailyOccurrences(templates, overrides, logs, todayStr);
+        : generateDailyOccurrences(todayBlocks.length > 0 ? todayBlocks : templates, overrides, logs, todayStr);
 
     syncOccurrencesToWidget(todayOccurrences);
-  }, [occurrences, selectedDate, templates, overrides, logs]);
+  }, [occurrences, selectedDate, templates, overrides, logs, weeklyPlanner, dayTemplates]);
 
   // Skip complete routine handler
   const handleSkipCompleteRoutine = async (
@@ -1231,6 +1349,7 @@ export default function RoutineApp() {
                   { id: 'week', label: 'Week', icon: CalendarDays },
                   { id: 'month', label: 'Month', icon: Calendar },
                   { id: 'goals', label: 'Goals', icon: Target },
+                  { id: 'templates', label: 'Templates', icon: Layers },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
                   { id: 'settings', label: 'Settings & Sync', icon: Settings },
                 ].map((tab) => {
@@ -1512,6 +1631,9 @@ export default function RoutineApp() {
                 onDeleteComment={handleDeleteComment}
                 lifeGoals={lifeGoals}
                 onSwitchToGoals={() => setActiveTab('goals')}
+                activeDayTemplate={activeDayTemplate}
+                allDayTemplates={dayTemplates}
+                onQuickSwitchTemplate={handleQuickSwitchTodayTemplate}
               />
             </>
           )}
@@ -1570,6 +1692,19 @@ export default function RoutineApp() {
               onDeleteListItem={handleDeleteListItem}
               onAddExperience={handleAddExperience}
               onDeleteExperience={handleDeleteExperience}
+            />
+          )}
+
+          {activeTab === 'templates' && (
+            <TemplatesDashboard
+              userId={userId}
+              templates={dayTemplates}
+              planner={weeklyPlanner || DayTemplateRepository.getLocalWeeklyPlanner(userId)}
+              onSaveTemplate={handleSaveDayTemplate}
+              onDeleteTemplate={handleDeleteDayTemplate}
+              onDuplicateTemplate={handleDuplicateDayTemplate}
+              onSavePlanner={handleSaveWeeklyPlanner}
+              onRefresh={loadData}
             />
           )}
 

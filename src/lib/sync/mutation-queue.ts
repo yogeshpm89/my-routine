@@ -1,4 +1,14 @@
-export type SyncCollection = 'templates' | 'overrides' | 'logs' | 'goals' | 'settings' | 'ai_actions' | 'ai_executions' | 'life_goals';
+export type SyncCollection =
+  | 'templates'
+  | 'overrides'
+  | 'logs'
+  | 'goals'
+  | 'settings'
+  | 'ai_actions'
+  | 'ai_executions'
+  | 'life_goals'
+  | 'day_templates'
+  | 'weekly_planner';
 export type SyncAction = 'set' | 'delete';
 
 export interface SyncMutation {
