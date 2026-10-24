@@ -8,6 +8,7 @@ import {
   GoalTarget,
   ActivityOccurrence,
 } from '@/types/routine';
+import { GoalProgressEntry, GoalTrackingUnit } from '@/types/goal-progress';
 import { AnalyticsCalculator, RoutineAnalyticsSummary } from '@/lib/analytics/analytics-calculator';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { addDays, formatDuration, getDayOfWeek } from '@/lib/time-utils';
@@ -26,6 +27,7 @@ import {
   Edit2,
 } from 'lucide-react';
 import { GoalEditorDialog } from './goal-editor-dialog';
+import { GoalProgressCard } from './goal-progress-card';
 
 interface AnalyticsTabProps {
   userId?: string;
@@ -34,8 +36,19 @@ interface AnalyticsTabProps {
   overrides: OccurrenceOverride[];
   logs: ActivityLog[];
   goals: GoalTarget[];
+  goalProgress?: GoalProgressEntry[];
   onSaveGoal?: (goal: GoalTarget) => void;
   onDeleteGoal?: (goalId: string) => void;
+  onRecordGoalProgress?: (params: {
+    goalId: string;
+    amount: number;
+    unit: GoalTrackingUnit;
+    durationMinutes: number;
+    notes?: string;
+    source?: 'manual' | 'quick_add';
+  }) => Promise<void> | void;
+  onDeleteGoalProgress?: (entryId: string) => Promise<void> | void;
+  onUndoLastGoalProgress?: (goalId: string, date: string) => Promise<void> | void;
 }
 
 export function AnalyticsTab({
@@ -45,8 +58,12 @@ export function AnalyticsTab({
   overrides,
   logs,
   goals,
+  goalProgress = [],
   onSaveGoal,
   onDeleteGoal,
+  onRecordGoalProgress,
+  onDeleteGoalProgress,
+  onUndoLastGoalProgress,
 }: AnalyticsTabProps) {
   const [timeframe, setTimeframe] = useState<'day' | 'week'>('day');
   const [goalEditorOpen, setGoalEditorOpen] = useState(false);
@@ -78,7 +95,8 @@ export function AnalyticsTab({
     goals,
     timeframe,
     startDate,
-    endDate
+    endDate,
+    goalProgress
   );
 
   return (
@@ -224,83 +242,27 @@ export function AnalyticsTab({
           </div>
         </div>
 
-        <div className="space-y-3">
-          {summary.goalFulfillments.map((gf) => {
-            const statusConfig = {
-              achieved: { label: 'Achieved', bg: 'bg-emerald-950/80 text-emerald-400 border-emerald-500/30' },
-              on_track: { label: 'On Track', bg: 'bg-blue-950/80 text-blue-400 border-blue-500/30' },
-              under_target: { label: 'Deficit', bg: 'bg-amber-950/80 text-amber-400 border-amber-500/30' },
-              unscheduled: { label: 'Unscheduled', bg: 'bg-rose-950/80 text-rose-400 border-rose-500/30' },
-            }[gf.status];
-
-            return (
-              <div
-                key={gf.goal.id}
-                className="p-3.5 rounded-xl bg-slate-800/40 border border-white/5 space-y-2 group hover:border-white/10 transition"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div>
-                      <span className="text-sm font-bold text-white block">
-                        {gf.goal.title}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        Target: {formatDuration(gf.targetMinutes)} • Planned:{' '}
-                        {formatDuration(gf.plannedMinutes)} • Logged:{' '}
-                        <strong className="text-emerald-400">{formatDuration(gf.actualMinutes)}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${statusConfig.bg}`}
-                    >
-                      {statusConfig.label}
-                    </span>
-                    {onSaveGoal && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingGoal(gf.goal);
-                          setGoalEditorOpen(true);
-                        }}
-                        className="min-w-[40px] min-h-[40px] p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700/60 transition active:scale-95 flex items-center justify-center cursor-pointer"
-                        title="Edit goal target"
-                        aria-label="Edit goal target"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="space-y-1">
-                  <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        gf.status === 'achieved'
-                          ? 'bg-emerald-500'
-                          : gf.status === 'on_track'
-                          ? 'bg-blue-500'
-                          : gf.status === 'under_target'
-                          ? 'bg-amber-500'
-                          : 'bg-rose-500'
-                      }`}
-                      style={{ width: `${Math.min(100, gf.fulfillmentPercentage)}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>{gf.fulfillmentPercentage}% completed</span>
-                    {gf.deficitMinutes > 0 && (
-                      <span className="text-amber-400">{formatDuration(gf.deficitMinutes)} deficit</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="space-y-4">
+          {summary.goalFulfillments.map((gf) => (
+            <GoalProgressCard
+              key={gf.goal.id}
+              goal={gf.goal}
+              fulfillment={gf}
+              date={selectedDate}
+              entries={goalProgress}
+              onRecordProgress={onRecordGoalProgress || (() => {})}
+              onDeleteEntry={onDeleteGoalProgress || (() => {})}
+              onUndoLastEntry={onUndoLastGoalProgress || (() => {})}
+              onEditGoal={
+                onSaveGoal
+                  ? (g) => {
+                      setEditingGoal(g);
+                      setGoalEditorOpen(true);
+                    }
+                  : undefined
+              }
+            />
+          ))}
         </div>
       </div>
 

@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { LifeGoal } from '@/types/goals';
 import { DayRoutineTemplate } from '@/types/routine-templates';
+import { GoalTarget } from '@/types/routine';
+import { GoalProgressEntry, GoalTrackingUnit } from '@/types/goal-progress';
+import { TodayGoalQuickBar } from './today-goal-quick-bar';
 import {
   addDays,
   timeToMinutes,
@@ -59,6 +62,17 @@ interface TodayTimelineProps {
   activeDayTemplate?: DayRoutineTemplate | null;
   allDayTemplates?: DayRoutineTemplate[];
   onQuickSwitchTemplate?: (templateId: string) => void;
+  dailyGoals?: GoalTarget[];
+  goalProgress?: GoalProgressEntry[];
+  onRecordGoalProgress?: (params: {
+    goalId: string;
+    amount: number;
+    unit: GoalTrackingUnit;
+    durationMinutes: number;
+    notes?: string;
+    source?: 'manual' | 'quick_add';
+  }) => Promise<void> | void;
+  onUndoLastGoalProgress?: (goalId: string, date: string) => Promise<void> | void;
 }
 
 export function TodayTimeline({
@@ -86,6 +100,10 @@ export function TodayTimeline({
   activeDayTemplate,
   allDayTemplates,
   onQuickSwitchTemplate,
+  dailyGoals,
+  goalProgress,
+  onRecordGoalProgress,
+  onUndoLastGoalProgress,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'skipped'>('all');
@@ -440,6 +458,18 @@ export function TodayTimeline({
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
+      )}
+
+      {/* Daily Goals Quick Progress Bar */}
+      {dailyGoals && dailyGoals.length > 0 && onRecordGoalProgress && (
+        <TodayGoalQuickBar
+          goals={dailyGoals}
+          occurrences={occurrences}
+          goalProgress={goalProgress || []}
+          selectedDate={selectedDate}
+          onRecordProgress={onRecordGoalProgress}
+          onUndoLastProgress={onUndoLastGoalProgress || (() => {})}
+        />
       )}
 
       {/* Task Filter Strip on Mobile & Desktop */}
