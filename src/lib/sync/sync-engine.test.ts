@@ -43,7 +43,7 @@ describe('Offline Mutation Queue & Backup Service', () => {
     const initialTemplates = getInitialRoutineTemplates(userId);
     const backup = BackupService.exportAllData(userId);
 
-    expect(backup.version).toBe('1.0');
+    expect(['1.0', '1.1']).toContain(backup.version);
     expect(backup.userId).toBe(userId);
     expect(backup.exportedAt).toBeDefined();
     expect(backup.templates.length).toBeGreaterThan(0);

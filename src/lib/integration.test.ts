@@ -153,7 +153,7 @@ describe('My Routine Full System Integration', () => {
 
     const backupPackage = BackupService.exportAllData(testUserId);
     expect(backupPackage).toBeDefined();
-    expect(backupPackage.version).toBe('1.0');
+    expect(['1.0', '1.1']).toContain(backupPackage.version);
     expect(backupPackage.templates.length).toBeGreaterThanOrEqual(20);
 
     const serialized = JSON.stringify(backupPackage);

@@ -10,6 +10,8 @@ import {
   ScheduledNotificationItem,
   NotificationDiagnostics,
 } from '@/types/notifications';
+import { DayRoutineTemplate, WeeklyPlannerConfig } from '@/types/routine-templates';
+import { DayTemplateResolver } from '@/lib/templates/day-template-resolver';
 import { generateDailyOccurrences } from '@/lib/occurrence-generator';
 import { LogRepository } from '@/lib/repositories/log-repository';
 import {
@@ -181,7 +183,9 @@ export class NotificationManager {
     overrides: OccurrenceOverride[],
     prefs: NotificationPreferences,
     baseDate: string = getTodayDateString('Asia/Kolkata'),
-    logs: ActivityLog[] = []
+    logs: ActivityLog[] = [],
+    dayTemplates?: DayRoutineTemplate[],
+    weeklyPlanner?: WeeklyPlannerConfig
   ): ScheduledNotificationItem[] {
     const scheduledItems: ScheduledNotificationItem[] = [];
     const nowTimestamp = Date.now();
@@ -195,7 +199,12 @@ export class NotificationManager {
     const dates = [baseDate, addDays(baseDate, 1), addDays(baseDate, 2)];
 
     for (const dateStr of dates) {
-      const occurrences = generateDailyOccurrences(activeTemplates, overrides, logs, dateStr);
+      const dayBlocks =
+        dayTemplates && weeklyPlanner && dayTemplates.length > 0
+          ? DayTemplateResolver.resolveBlocksForDate(dateStr, weeklyPlanner, dayTemplates)
+          : activeTemplates;
+      const activeDayBlocks = dayBlocks.filter((t) => !t.isArchived);
+      const occurrences = generateDailyOccurrences(activeDayBlocks, overrides, logs, dateStr);
 
       for (const occ of occurrences) {
         // Skip cancelled occurrences
@@ -321,10 +330,20 @@ export class NotificationManager {
     templates: RoutineTemplate[],
     overrides: OccurrenceOverride[],
     prefs: NotificationPreferences,
-    logs: ActivityLog[] = []
+    logs: ActivityLog[] = [],
+    dayTemplates?: DayRoutineTemplate[],
+    weeklyPlanner?: WeeklyPlannerConfig
   ): Promise<{ scheduled: number; cancelled: number }> {
     const baseDate = getTodayDateString('Asia/Kolkata');
-    const targetItems = this.compute72HourSchedule(templates, overrides, prefs, baseDate, logs);
+    const targetItems = this.compute72HourSchedule(
+      templates,
+      overrides,
+      prefs,
+      baseDate,
+      logs,
+      dayTemplates,
+      weeklyPlanner
+    );
     this.saveLocalRegistry(userId, targetItems);
 
     const now = getCurrentTimeString('Asia/Kolkata');

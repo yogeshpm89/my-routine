@@ -21,6 +21,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { LifeGoal } from '@/types/goals';
+import { DayRoutineTemplate } from '@/types/routine-templates';
 import {
   addDays,
   timeToMinutes,
@@ -55,6 +56,9 @@ interface TodayTimelineProps {
   onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
   lifeGoals?: LifeGoal[];
   onSwitchToGoals?: () => void;
+  activeDayTemplate?: DayRoutineTemplate | null;
+  allDayTemplates?: DayRoutineTemplate[];
+  onQuickSwitchTemplate?: (templateId: string) => void;
 }
 
 export function TodayTimeline({
@@ -79,6 +83,9 @@ export function TodayTimeline({
   onDeleteComment,
   lifeGoals,
   onSwitchToGoals,
+  activeDayTemplate,
+  allDayTemplates,
+  onQuickSwitchTemplate,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'skipped'>('all');
@@ -162,6 +169,25 @@ export function TodayTimeline({
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   🌴 Weekend
                 </span>
+              )}
+
+              {activeDayTemplate && (
+                <div className="relative flex items-center">
+                  <select
+                    value={activeDayTemplate.id}
+                    onChange={(e) => onQuickSwitchTemplate?.(e.target.value)}
+                    className="appearance-none bg-slate-900/90 hover:bg-slate-800 text-white text-[10px] sm:text-[11px] font-bold pl-2.5 pr-6 py-1 rounded-md border border-white/10 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-sm"
+                    style={{ borderLeftColor: activeDayTemplate.color || '#3b82f6', borderLeftWidth: '3px' }}
+                    title="Active day routine template (click to quick-switch)"
+                  >
+                    {(allDayTemplates || [activeDayTemplate]).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 pointer-events-none" />
+                </div>
               )}
 
               <input

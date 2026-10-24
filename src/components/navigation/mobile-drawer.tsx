@@ -20,13 +20,14 @@ import {
   ShieldCheck,
   Target,
   Gauge,
+  Layers,
 } from 'lucide-react';
 
 interface MobileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: 'today' | 'week' | 'month' | 'goals' | 'ai' | 'analytics' | 'settings';
-  onSelectTab: (tab: 'today' | 'week' | 'month' | 'goals' | 'ai' | 'analytics' | 'settings') => void;
+  activeTab: 'today' | 'week' | 'month' | 'goals' | 'templates' | 'ai' | 'analytics' | 'settings';
+  onSelectTab: (tab: 'today' | 'week' | 'month' | 'goals' | 'templates' | 'ai' | 'analytics' | 'settings') => void;
   onOpenCreate: () => void;
   onSyncNow?: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
@@ -102,6 +103,13 @@ export function MobileDrawer({
       subtitle: 'Personal & professional milestone targets',
       icon: Target,
       color: 'text-indigo-400 bg-indigo-500/10',
+    },
+    {
+      id: 'templates' as const,
+      label: 'Templates & Planner',
+      subtitle: 'Day routine templates & weekly schedule',
+      icon: Layers,
+      color: 'text-cyan-400 bg-cyan-500/10',
     },
     {
       id: 'analytics' as const,
