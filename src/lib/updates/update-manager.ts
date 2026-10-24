@@ -77,7 +77,9 @@ export class UpdateManager {
    * Fetch the latest version manifest from Firebase Hosting.
    */
   static async fetchLatestManifest(): Promise<AppUpdateManifest | null> {
+    const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
     const isLocalOrHosting =
+      !isNative &&
       typeof window !== 'undefined' &&
       (window.location.origin.includes('my-routine-app-3f631') ||
         window.location.hostname === 'localhost' ||

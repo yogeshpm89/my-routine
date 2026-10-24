@@ -9,6 +9,7 @@ import { TemplateEditorModal } from './template-editor-modal';
 import { TemplateImportDialog } from './template-import-dialog';
 import { ApplyTemplateDialog } from './apply-template-dialog';
 import { DayTemplateRepository } from '@/lib/repositories/day-template-repository';
+import { getTodayDateString } from '@/lib/time-utils';
 
 interface TemplatesDashboardProps {
   userId: string;
@@ -113,7 +114,7 @@ export function TemplatesDashboard({
 
   // Apply dialog actions
   const handleApplyToday = async (templateId: string) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateString('Asia/Kolkata');
     const updatedDateOverrides = {
       ...planner.dateOverrides,
       [today]: templateId,
@@ -166,32 +167,36 @@ export function TemplatesDashboard({
   return (
     <div className="space-y-6">
       {/* Top Segmented Tab Switcher */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-4">
-        <div className="flex items-center gap-2 p-1 bg-slate-900/90 border border-white/10 rounded-2xl shadow-inner">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex items-center gap-1.5 sm:gap-2 p-1 bg-slate-900/90 border border-white/10 rounded-2xl shadow-inner">
           <button
             type="button"
+            id="tab-btn-templates"
             onClick={() => setActiveSubTab('templates')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all min-h-[44px] cursor-pointer ${
               activeSubTab === 'templates'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>Day Routine Templates ({templates.length})</span>
+            <Layers className="w-4 h-4 shrink-0" />
+            <span className="sm:hidden">Templates ({templates.length})</span>
+            <span className="hidden sm:inline">Day Routine Templates ({templates.length})</span>
           </button>
 
           <button
             type="button"
+            id="tab-btn-planner"
             onClick={() => setActiveSubTab('planner')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all min-h-[44px] cursor-pointer ${
               activeSubTab === 'planner'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <CalendarDays className="w-4 h-4" />
-            <span>Weekly Schedule Planner</span>
+            <CalendarDays className="w-4 h-4 shrink-0" />
+            <span className="sm:hidden">Weekly Planner</span>
+            <span className="hidden sm:inline">Weekly Schedule Planner</span>
           </button>
         </div>
 

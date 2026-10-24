@@ -26,6 +26,8 @@ import {
   Plus,
   Edit2,
 } from 'lucide-react';
+import { DayRoutineTemplate, WeeklyPlannerConfig } from '@/types/routine-templates';
+import { DayTemplateResolver } from '@/lib/templates/day-template-resolver';
 import { GoalEditorDialog } from './goal-editor-dialog';
 import { GoalProgressCard } from './goal-progress-card';
 
@@ -33,6 +35,8 @@ interface AnalyticsTabProps {
   userId?: string;
   selectedDate: string;
   templates: RoutineTemplate[];
+  dayTemplates?: DayRoutineTemplate[];
+  weeklyPlanner?: WeeklyPlannerConfig;
   overrides: OccurrenceOverride[];
   logs: ActivityLog[];
   goals: GoalTarget[];
@@ -55,6 +59,8 @@ export function AnalyticsTab({
   userId = '',
   selectedDate,
   templates,
+  dayTemplates,
+  weeklyPlanner,
   overrides,
   logs,
   goals,
@@ -69,13 +75,21 @@ export function AnalyticsTab({
   const [goalEditorOpen, setGoalEditorOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<GoalTarget | null>(null);
 
+  const getBlocksForDate = (dateStr: string) => {
+    if (weeklyPlanner && dayTemplates && dayTemplates.length > 0) {
+      const resolved = DayTemplateResolver.resolveBlocksForDate(dateStr, weeklyPlanner, dayTemplates);
+      if (resolved && resolved.length > 0) return resolved;
+    }
+    return templates;
+  };
+
   // Compute occurrences based on timeframe
   let occurrences: ActivityOccurrence[] = [];
   let startDate = selectedDate;
   let endDate = selectedDate;
 
   if (timeframe === 'day') {
-    occurrences = generateDailyOccurrences(templates, overrides, logs, selectedDate);
+    occurrences = generateDailyOccurrences(getBlocksForDate(selectedDate), overrides, logs, selectedDate);
   } else {
     // Week: 7 days starting from Monday of the week
     const currentDow = getDayOfWeek(selectedDate);
@@ -85,7 +99,7 @@ export function AnalyticsTab({
 
     for (let i = 0; i < 7; i++) {
       const dateStr = addDays(startDate, i);
-      const dayOccs = generateDailyOccurrences(templates, overrides, logs, dateStr);
+      const dayOccs = generateDailyOccurrences(getBlocksForDate(dateStr), overrides, logs, dateStr);
       occurrences.push(...dayOccs);
     }
   }

@@ -100,13 +100,13 @@ jobs:
         if: success()
         with:
           tag_name: latest
-          name: "My Routine Latest Release (v1.2.0)"
+          name: "My Routine Latest Release (v1.4.0)"
           body: "Official Android APK release for My Routine. Download and tap to install on your phone."
           files: release-apks/my-routine-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Deploy Web App & Version Manifest to Firebase Hosting
+      - name: Deploy Web App & Firestore Rules to Firebase
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MY_ROUTINE_APP_3F631 || secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -120,10 +120,10 @@ jobs:
             echo "Deploying via Firebase Service Account..."
             echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
             export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json"
-            npx -y firebase-tools@latest deploy --only hosting --project my-routine-app-3f631
+            npx -y firebase-tools@latest deploy --only hosting,firestore:rules --project my-routine-app-3f631
           elif [ -n "$FIREBASE_TOKEN" ]; then
             echo "Deploying via FIREBASE_TOKEN..."
-            npx -y firebase-tools@latest deploy --only hosting --project my-routine-app-3f631 --token "$FIREBASE_TOKEN"
+            npx -y firebase-tools@latest deploy --only hosting,firestore:rules --project my-routine-app-3f631 --token "$FIREBASE_TOKEN"
           else
             echo "::warning title=Firebase Secret Not Configured::Neither FIREBASE_SERVICE_ACCOUNT nor FIREBASE_TOKEN found."
           fi

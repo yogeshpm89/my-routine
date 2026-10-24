@@ -268,14 +268,32 @@ export default function RoutineApp() {
       setLifeGoals(newLifeGoals);
     });
 
+    const unsubDayTemplates = DayTemplateRepository.subscribeTemplates(userId, (newDayTemplates) => {
+      setDayTemplates(newDayTemplates);
+    });
+
+    const unsubWeeklyPlanner = DayTemplateRepository.subscribeWeeklyPlanner(userId, (newPlanner) => {
+      setWeeklyPlanner(newPlanner);
+    });
+
     const unsubConflicts = SyncEngine.subscribeConflicts(setSyncConflicts);
     const unsubSyncState = SyncEngine.subscribeSync((state) => {
       if (state === 'synced') {
         const curTemplates = RoutineRepository.getLocalTemplates(userId);
         const curOverrides = OverrideRepository.getLocalOverrides(userId);
         const curLogs = LogRepository.getLocalLogs(userId);
+        const curDayTemplates = DayTemplateRepository.getLocalTemplates(userId);
+        const curPlanner = DayTemplateRepository.getLocalWeeklyPlanner(userId);
         const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
-        NotificationManager.reconcileNotifications(userId, curTemplates, curOverrides, prefs, curLogs);
+        NotificationManager.reconcileNotifications(
+          userId,
+          curTemplates,
+          curOverrides,
+          prefs,
+          curLogs,
+          curDayTemplates,
+          curPlanner
+        );
       }
     });
 
@@ -286,10 +304,12 @@ export default function RoutineApp() {
       unsubGoals();
       unsubGoalProgress();
       unsubLifeGoals();
+      unsubDayTemplates();
+      unsubWeeklyPlanner();
       unsubConflicts();
       unsubSyncState();
     };
-  }, [userId, authLoading, isAuthenticated]);
+  }, [userId, authLoading, isAuthenticated, isCloudSynced]);
 
   const handleResolveConflict = async (
     conflictId: string,
@@ -1683,6 +1703,7 @@ export default function RoutineApp() {
                 activeDayTemplate={activeDayTemplate}
                 allDayTemplates={dayTemplates}
                 onQuickSwitchTemplate={handleQuickSwitchTodayTemplate}
+                onNavigateToTemplates={() => setActiveTab('templates')}
                 dailyGoals={goals}
                 goalProgress={goalProgress}
                 onRecordGoalProgress={handleRecordGoalProgress}
@@ -1770,6 +1791,8 @@ export default function RoutineApp() {
               userId={userId}
               selectedDate={selectedDate}
               templates={templates}
+              dayTemplates={dayTemplates}
+              weeklyPlanner={weeklyPlanner || undefined}
               overrides={overrides}
               logs={logs}
               goals={goals}

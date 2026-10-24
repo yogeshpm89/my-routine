@@ -337,14 +337,14 @@ export function TodayGoalQuickBar({
                 </div>
 
                 {/* Quick Add Buttons */}
-                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                   {unitConfig.quickPresets.map((preset) => (
                     <button
                       key={`${goal.id}-${preset}`}
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => handleQuickAdd(goal, preset, unitConfig.primaryUnit, unitConfig)}
-                      className="px-2 py-1 min-h-[32px] rounded-lg bg-slate-700/60 hover:bg-blue-600 hover:text-white text-[11px] font-semibold text-slate-200 border border-white/5 transition active:scale-95 cursor-pointer disabled:opacity-50"
+                      className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-slate-700/60 hover:bg-blue-600 hover:text-white text-[11px] font-semibold text-slate-200 border border-white/5 transition active:scale-95 cursor-pointer disabled:opacity-50"
                       title={`Add ${preset} ${unitConfig.unitLabel}`}
                     >
                       +{preset} {unitConfig.unitLabel}
@@ -361,7 +361,7 @@ export function TodayGoalQuickBar({
                         setCustomAmount('');
                       }
                     }}
-                    className={`px-2 py-1 min-h-[32px] rounded-lg text-[11px] font-semibold border transition active:scale-95 cursor-pointer ${
+                    className={`px-2.5 py-1.5 min-h-[36px] rounded-lg text-[11px] font-semibold border transition active:scale-95 cursor-pointer ${
                       isSelected
                         ? 'bg-blue-600 border-blue-400 text-white'
                         : 'bg-slate-700/40 hover:bg-slate-700 border-white/5 text-slate-300'

@@ -11,6 +11,7 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  onSnapshot,
 } from 'firebase/firestore';
 
 const DAY_TEMPLATES_STORAGE_KEY_PREFIX = 'my_routine_day_templates_';
@@ -77,7 +78,13 @@ export class DayTemplateRepository {
     }
 
     try {
-      return JSON.parse(raw) as DayRoutineTemplate[];
+      const parsed = JSON.parse(raw) as DayRoutineTemplate[];
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        const defaults = getDefaultDayTemplates(userId);
+        this.saveLocalTemplates(userId, defaults);
+        return defaults;
+      }
+      return parsed;
     } catch {
       const defaults = getDefaultDayTemplates(userId);
       this.saveLocalTemplates(userId, defaults);
@@ -409,5 +416,100 @@ export class DayTemplateRepository {
     const templates = await this.getTemplates(userId);
     const planner = await this.getWeeklyPlanner(userId);
     return { templates, planner };
+  }
+
+  static subscribeTemplates(
+    userId: string,
+    onData: (templates: DayRoutineTemplate[]) => void,
+    onError?: (error: unknown) => void
+  ): () => void {
+    const local = this.getLocalTemplates(userId);
+    onData(local);
+
+    if (!canSyncWithFirestore(userId)) {
+      return () => {};
+    }
+
+    try {
+      const templatesCol = collection(db, `users/${userId}/day_templates`);
+      const unsubscribe = onSnapshot(
+        templatesCol,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const remote: DayRoutineTemplate[] = [];
+            snapshot.forEach((d) => {
+              remote.push(d.data() as DayRoutineTemplate);
+            });
+            const pendingIds = new Set(
+              MutationQueue.getQueue(userId)
+                .filter((m) => m.collection === 'day_templates')
+                .map((m) => m.docId)
+            );
+            const currentLocal = this.getLocalTemplates(userId);
+            const mergedMap = new Map<string, DayRoutineTemplate>();
+            remote.forEach((t) => mergedMap.set(t.id, t));
+            currentLocal.forEach((t) => {
+              if (pendingIds.has(t.id) || !mergedMap.has(t.id)) {
+                mergedMap.set(t.id, t);
+              }
+            });
+            const merged = Array.from(mergedMap.values());
+            this.saveLocalTemplates(userId, merged);
+            onData(merged);
+          } else if (local.length > 0) {
+            for (const t of local) {
+              setDoc(doc(db, `users/${userId}/day_templates`, t.id), cleanForFirestore(t)).catch(console.warn);
+            }
+          }
+        },
+        (err) => {
+          console.warn('Realtime day templates listener error:', err);
+          if (onError) onError(err);
+        }
+      );
+      return unsubscribe;
+    } catch (err) {
+      console.warn('Failed to attach realtime day templates listener:', err);
+      if (onError) onError(err);
+      return () => {};
+    }
+  }
+
+  static subscribeWeeklyPlanner(
+    userId: string,
+    onData: (planner: WeeklyPlannerConfig) => void,
+    onError?: (error: unknown) => void
+  ): () => void {
+    const local = this.getLocalWeeklyPlanner(userId);
+    onData(local);
+
+    if (!canSyncWithFirestore(userId)) {
+      return () => {};
+    }
+
+    try {
+      const docRef = doc(db, `users/${userId}/weekly_planner`, 'config');
+      const unsubscribe = onSnapshot(
+        docRef,
+        (snap) => {
+          if (snap.exists()) {
+            const remote = snap.data() as WeeklyPlannerConfig;
+            this.saveLocalWeeklyPlanner(userId, remote);
+            onData(remote);
+          } else if (local) {
+            setDoc(docRef, cleanForFirestore(local)).catch(console.warn);
+          }
+        },
+        (err) => {
+          console.warn('Realtime weekly planner listener error:', err);
+          if (onError) onError(err);
+        }
+      );
+      return unsubscribe;
+    } catch (err) {
+      console.warn('Failed to attach realtime weekly planner listener:', err);
+      if (onError) onError(err);
+      return () => {};
+    }
   }
 }

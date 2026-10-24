@@ -42,7 +42,13 @@ export class GoalRepository {
       return initial;
     }
     try {
-      return JSON.parse(raw) as GoalTarget[];
+      const parsed = JSON.parse(raw) as GoalTarget[];
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        const initial = getInitialGoalTargets(userId);
+        this.saveLocalGoals(userId, initial);
+        return initial;
+      }
+      return parsed;
     } catch {
       return getInitialGoalTargets(userId);
     }
