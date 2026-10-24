@@ -1,18 +1,16 @@
 {
-  "version": "1.4.0",
-  "versionCode": 6,
+  "version": "1.4.1",
+  "versionCode": 7,
   "minSupportedVersion": "1.0.0",
   "releaseDate": "2026-10-24",
-  "title": "v1.4.0 — Minute-Level Goal Progress & Incremental Daily Tracking",
+  "title": "v1.4.1 — Mobile Layout, Sync Reliability & Security Rules Update",
   "changelog": [
-    "Minute-Level Goal Updates: Log daily progress in granular increments without waiting for full routine blocks",
-    "Natural Unit Tracking: Native calibrated metrics for cycling (km), reading (chapters), courses (topics), and habits (minutes)",
-    "Quick-Add Action Presets: 1-tap increments calibrated to minimum tracker resolution (e.g. +1 km, +5 km, +10 km, +15 km; +1 ch, +5 ch; +1 topic, +2 topics; +1m, +5m, +15m)",
-    "Collapsible Daily Goals Bar: Rapid progress tracking directly from Today Timeline schedule without leaving the view",
-    "Precision Progress Bar: Capped at 100% with true accumulated duration and 1 decimal place percentage accuracy",
-    "Double-Counting Protection: Deterministic engine prevents duplicates between manual increments and routine occurrence logs",
-    "1-Click Undo & Entry History: Immediate mistake recovery and daily audit log per goal",
-    "Cloud Sync & Backup Integration: Full offline local storage, Firestore real-time listeners, and routine backup archive support"
+    "Mobile Routine Template Bar: Dedicated responsive selector and one-tap Planner shortcut on mobile screens",
+    "Firestore Security Rules: Enabled cloud read/write permissions for day templates, weekly planner, and goal progress",
+    "Native Android Update Detection: Fixed remote manifest resolution so installed APKs reliably receive update alerts",
+    "Real-Time Cloud Listeners: Instant background synchronization for routine templates and weekly schedule planner",
+    "Offline Seeding Fallback: Automatic initialization of default templates and daily goals when local cache is empty",
+    "Enhanced Touch Targets: Optimized quick-add buttons and responsive tabs for mobile viewports"
   ],
   "apkUrl": "https://github.com/yogeshpm89/my-routine/releases/latest/download/my-routine-release.apk",
   "fileSizeBytes": 5242880,

@@ -100,7 +100,7 @@ jobs:
         if: success()
         with:
           tag_name: latest
-          name: "My Routine Latest Release (v1.4.0)"
+          name: "My Routine Latest Release (v1.4.1)"
           body: "Official Android APK release for My Routine. Download and tap to install on your phone."
           files: release-apks/my-routine-release.apk
         env:
