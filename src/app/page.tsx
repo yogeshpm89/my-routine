@@ -10,6 +10,8 @@ import {
   ActivityStatus,
   EditScope,
   GoalTarget,
+  ReplacementActivityDetails,
+  RescheduleDetails,
 } from '@/types/routine';
 import { RoutineRepository } from '@/lib/repositories/routine-repository';
 import { OverrideRepository } from '@/lib/repositories/override-repository';
@@ -53,6 +55,7 @@ import { AppUpdateManifest } from '@/types/updates';
 import { InAppUpdateModal } from '@/components/updates/in-app-update-modal';
 import { HolidayService } from '@/lib/holidays/holiday-service';
 import { SkipCompleteRoutineModal } from '@/components/routine/skip-complete-routine-modal';
+import { ReplaceBlockDialog } from '@/components/routine/replace-block-dialog';
 import { LifeGoal, GoalTrackedItem, GoalExperienceEntry } from '@/types/goals';
 import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import { GoalsDashboard } from '@/components/goals/goals-dashboard';
@@ -129,6 +132,10 @@ export default function RoutineApp() {
 
   // Skip complete routine state
   const [skipRoutineModalOpen, setSkipRoutineModalOpen] = useState(false);
+
+  // Replace block dialog state
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [replacingOccurrence, setReplacingOccurrence] = useState<ActivityOccurrence | null>(null);
 
   // Speedometer modal state
   const [speedometerOpen, setSpeedometerOpen] = useState(false);
@@ -1136,7 +1143,13 @@ export default function RoutineApp() {
         occurrence.templateId,
         occurrence.title,
         duration,
-        occurrence.log?.completionNotes || ''
+        occurrence.log?.completionNotes || '',
+        {
+          isReplacement: occurrence.isReplacement,
+          linkedGoalId: occurrence.linkedGoalId,
+          replacesTemplateId: occurrence.replacesTemplateId,
+          isReplaced: occurrence.isReplaced,
+        }
       ).then((updatedGoals) => {
         if (updatedGoals.length > 0) {
           setLifeGoals((prev) => {
@@ -1364,6 +1377,221 @@ export default function RoutineApp() {
   const handleDeleteOccurrence = (occurrence: ActivityOccurrence) => {
     setTargetDeleteOccurrence(occurrence);
     setDeleteDialogOpen(true);
+  };
+
+  const handleOpenReplace = (occurrence: ActivityOccurrence) => {
+    setReplacingOccurrence(occurrence);
+    setReplaceDialogOpen(true);
+  };
+
+  const handleConfirmReplacement = async (data: {
+    originalOccurrence: ActivityOccurrence;
+    replacement: {
+      title: string;
+      category: any;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+      reason?: string;
+      linkedGoalId?: string;
+      isTemporary: boolean;
+      color?: string;
+    };
+    partialDurationMinutes?: number;
+    rescheduleOriginal?: {
+      date: string;
+      startTime: string;
+      endTime: string;
+    };
+    scope: EditScope;
+  }) => {
+    if (!replacingOccurrence || !userId) return;
+
+    try {
+      const replacementDetails: ReplacementActivityDetails = {
+        id: `repl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        title: data.replacement.title,
+        category: data.replacement.category,
+        startTime: data.replacement.startTime,
+        endTime: data.replacement.endTime,
+        durationMinutes: data.replacement.durationMinutes,
+        isTemporary: data.replacement.isTemporary,
+        linkedGoalId: data.replacement.linkedGoalId,
+        reason: data.replacement.reason,
+        color: data.replacement.color,
+      };
+
+      const rescheduleDetails: RescheduleDetails | undefined = data.rescheduleOriginal
+        ? {
+            date: data.rescheduleOriginal.date,
+            startTime: data.rescheduleOriginal.startTime,
+            endTime: data.rescheduleOriginal.endTime,
+          }
+        : undefined;
+
+      if (data.scope === 'future_occurrences') {
+        const yesterday = addDays(selectedDate, -1);
+        const oldTemplate = {
+          ...replacingOccurrence.template,
+          recurrence: {
+            ...replacingOccurrence.template.recurrence,
+            endDate: yesterday,
+          },
+        };
+        await RoutineRepository.saveTemplate(oldTemplate);
+
+        const newTemplateId = `template_${Date.now()}_repl`;
+        const newTemplate: RoutineTemplate = {
+          ...replacingOccurrence.template,
+          id: newTemplateId,
+          title: data.replacement.title,
+          category: data.replacement.category,
+          startTime: data.replacement.startTime,
+          endTime: data.replacement.endTime,
+          color: data.replacement.color || replacingOccurrence.template.color,
+          notes: data.replacement.reason
+            ? `Replaced recurring routine: ${data.replacement.reason}`
+            : replacingOccurrence.template.notes,
+          recurrence: {
+            ...replacingOccurrence.template.recurrence,
+            startDate: selectedDate,
+          },
+          updatedAt: Date.now(),
+        };
+        await RoutineRepository.saveTemplate(newTemplate);
+
+        if (data.replacement.linkedGoalId) {
+          const targetGoal = lifeGoals.find((g) => g.id === data.replacement.linkedGoalId);
+          if (targetGoal) {
+            const currentLinked = targetGoal.linkedTemplateIds || [];
+            if (!currentLinked.includes(newTemplateId)) {
+              await LifeGoalRepository.saveGoal({
+                ...targetGoal,
+                linkedTemplateIds: [...currentLinked, newTemplateId],
+                updatedAt: Date.now(),
+              });
+            }
+          }
+        }
+      } else if (data.scope === 'all_occurrences') {
+        const updatedTemplate: RoutineTemplate = {
+          ...replacingOccurrence.template,
+          title: data.replacement.title,
+          category: data.replacement.category,
+          startTime: data.replacement.startTime,
+          endTime: data.replacement.endTime,
+          color: data.replacement.color || replacingOccurrence.template.color,
+          updatedAt: Date.now(),
+        };
+        await RoutineRepository.saveTemplate(updatedTemplate);
+
+        if (data.replacement.linkedGoalId) {
+          const targetGoal = lifeGoals.find((g) => g.id === data.replacement.linkedGoalId);
+          if (targetGoal) {
+            const currentLinked = targetGoal.linkedTemplateIds || [];
+            if (!currentLinked.includes(updatedTemplate.id)) {
+              await LifeGoalRepository.saveGoal({
+                ...targetGoal,
+                linkedTemplateIds: [...currentLinked, updatedTemplate.id],
+                updatedAt: Date.now(),
+              });
+            }
+          }
+        }
+      }
+
+      // Always create the occurrence override for today's specific date to lock in metadata & partial logging
+      const overrideId = `override_${replacingOccurrence.templateId}_${selectedDate}`;
+      const override: OccurrenceOverride = {
+        id: overrideId,
+        userId,
+        templateId: replacingOccurrence.templateId,
+        date: selectedDate,
+        isCancelled: false,
+        isPostponed: false,
+        isReplaced: true,
+        replacementActivity: replacementDetails,
+        originalActivitySnapshot: {
+          title: replacingOccurrence.title,
+          category: replacingOccurrence.category,
+          startTime: replacingOccurrence.startTime,
+          endTime: replacingOccurrence.endTime,
+          durationMinutes: replacingOccurrence.durationMinutes,
+        },
+        partialDurationMinutes: data.partialDurationMinutes,
+        rescheduledTo: rescheduleDetails,
+        updatedAt: Date.now(),
+      };
+
+      await OverrideRepository.saveOverride(override);
+
+      // Handle logs and partial goal credits
+      if (data.partialDurationMinutes && data.partialDurationMinutes > 0) {
+        await LogRepository.updateStatus(
+          userId,
+          selectedDate,
+          replacingOccurrence.templateId,
+          'partial',
+          {
+            actualDurationMinutes: data.partialDurationMinutes,
+            completionNotes: data.replacement.reason
+              ? `Replaced after partial work (${data.partialDurationMinutes}m): ${data.replacement.reason}`
+              : `Replaced after partial work (${data.partialDurationMinutes}m)`,
+          }
+        );
+
+        const linkedGoal = lifeGoals.find((g) => g.linkedTemplateIds?.includes(replacingOccurrence.templateId));
+        if (linkedGoal) {
+          await LifeGoalRepository.recordActivityForGoal(
+            userId,
+            linkedGoal.id,
+            {
+              date: selectedDate,
+              activityTitle: replacingOccurrence.title,
+              durationMinutes: data.partialDurationMinutes,
+              notes: `Partial work before replacement with "${data.replacement.title}"`,
+              templateId: replacingOccurrence.templateId,
+              incrementProgress: Boolean(linkedGoal.autoTrackFromActivities),
+            }
+          );
+        }
+      } else {
+        await LogRepository.updateStatus(
+          userId,
+          selectedDate,
+          replacingOccurrence.templateId,
+          'replaced',
+          {
+            completionNotes: data.replacement.reason
+              ? `Replaced with "${data.replacement.title}": ${data.replacement.reason}`
+              : `Replaced with "${data.replacement.title}"`,
+          }
+        );
+      }
+
+      // Reconcile notifications
+      const curTemplates = RoutineRepository.getLocalTemplates(userId);
+      const curOverrides = OverrideRepository.getLocalOverrides(userId);
+      const curLogs = LogRepository.getLocalLogs(userId);
+      const prefs = NotificationPreferencesRepository.getLocalPreferences(userId);
+      NotificationManager.reconcileNotifications(
+        userId,
+        curTemplates,
+        curOverrides,
+        prefs,
+        curLogs,
+        dayTemplates,
+        weeklyPlanner || undefined
+      ).catch((e) => console.warn('Notification reconciliation error:', e));
+
+      showToast(`Replaced "${replacingOccurrence.title}" with "${data.replacement.title}" ✓`);
+      setReplaceDialogOpen(false);
+      setReplacingOccurrence(null);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to replace block:', err);
+      showToast('Error replacing block. Please try again.');
+    }
   };
 
   const handleExecuteAiForOccurrence = async (occ: ActivityOccurrence) => {
@@ -1759,6 +1987,7 @@ export default function RoutineApp() {
                 onUpdateComment={handleUpdateComment}
                 onDeleteComment={handleDeleteComment}
                 onOpenSpeedometer={() => setSpeedometerOpen(true)}
+                onOpenReplace={handleOpenReplace}
               />
 
               {/* Schedule Timeline */}
@@ -1795,6 +2024,7 @@ export default function RoutineApp() {
                 goalProgress={goalProgress}
                 onRecordGoalProgress={handleRecordGoalProgress}
                 onUndoLastGoalProgress={handleUndoLastGoalProgress}
+                onOpenReplace={handleOpenReplace}
               />
             </>
           )}
@@ -1999,6 +2229,21 @@ export default function RoutineApp() {
             holidayName={dayInfo.holidayName}
             onConfirmSkip={handleSkipCompleteRoutine}
             onClose={() => setSkipRoutineModalOpen(false)}
+          />
+
+          <ReplaceBlockDialog
+            isOpen={replaceDialogOpen}
+            occurrence={replacingOccurrence}
+            selectedDate={selectedDate}
+            allOccurrences={occurrences}
+            routineTemplates={templates}
+            dayTemplates={dayTemplates}
+            lifeGoals={lifeGoals}
+            onConfirmReplacement={handleConfirmReplacement}
+            onClose={() => {
+              setReplaceDialogOpen(false);
+              setReplacingOccurrence(null);
+            }}
           />
 
           {/* Mobile Bottom Navigation Dock */}

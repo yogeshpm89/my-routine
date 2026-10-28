@@ -222,7 +222,7 @@ export function GoalsDashboard({
     }));
   };
 
-  const togglePhaseCollapse = (goalId: string, phaseId: string, defaultCollapsed: boolean) => {
+  const togglePhaseCollapse = (goalId: string, phaseId: string, defaultCollapsed: boolean = true) => {
     const key = `${goalId}_${phaseId}`;
     setCollapsedPhases((prev) => {
       const current = prev[key] !== undefined ? prev[key] : defaultCollapsed;
@@ -237,7 +237,7 @@ export function GoalsDashboard({
     const isAnyExpanded = phases.some((ph) => {
       const key = `${goalId}_${ph.id}`;
       const isCollapsed =
-        collapsedPhases[key] !== undefined ? collapsedPhases[key] : ph.status === 'completed';
+        collapsedPhases[key] !== undefined ? collapsedPhases[key] : true;
       return !isCollapsed;
     });
 
@@ -1014,7 +1014,7 @@ export function GoalsDashboard({
                             const isCollapsed =
                               collapsedPhases[key] !== undefined
                                 ? collapsedPhases[key]
-                                : ph.status === 'completed';
+                                : true;
                             return !isCollapsed;
                           })
                             ? 'Collapse All'
@@ -1044,7 +1044,7 @@ export function GoalsDashboard({
                         const isPhaseCollapsed =
                           collapsedPhases[phaseKey] !== undefined
                             ? collapsedPhases[phaseKey]
-                            : isPhaseDone;
+                            : true;
 
                         return (
                           <div
@@ -1056,7 +1056,7 @@ export function GoalsDashboard({
                             }`}
                           >
                             <div
-                              onClick={() => togglePhaseCollapse(goal.id, ph.id, isPhaseDone)}
+                              onClick={() => togglePhaseCollapse(goal.id, ph.id, true)}
                               className="p-3 flex items-start justify-between gap-2 cursor-pointer hover:bg-white/[0.02] rounded-xl transition"
                             >
                               <div className="flex items-start gap-2 flex-1 min-w-0">
