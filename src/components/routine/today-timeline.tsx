@@ -58,6 +58,7 @@ interface TodayTimelineProps {
   onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
   onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
   onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
+  onOpenReplace?: (occurrence: ActivityOccurrence) => void;
   lifeGoals?: LifeGoal[];
   onSwitchToGoals?: () => void;
   activeDayTemplate?: DayRoutineTemplate | null;
@@ -107,6 +108,7 @@ export function TodayTimeline({
   goalProgress,
   onRecordGoalProgress,
   onUndoLastGoalProgress,
+  onOpenReplace,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'skipped'>('all');
@@ -592,6 +594,7 @@ export function TodayTimeline({
                         onAddComment={onAddComment}
                         onUpdateComment={onUpdateComment}
                         onDeleteComment={onDeleteComment}
+                        onOpenReplace={onOpenReplace}
                       />
                     );
                   })}
@@ -668,6 +671,7 @@ export function TodayTimeline({
                               onAddComment={onAddComment}
                               onUpdateComment={onUpdateComment}
                               onDeleteComment={onDeleteComment}
+                              onOpenReplace={onOpenReplace}
                             />
                           );
                         })}
@@ -701,6 +705,7 @@ export function TodayTimeline({
                     onAddComment={onAddComment}
                     onUpdateComment={onUpdateComment}
                     onDeleteComment={onDeleteComment}
+                    onOpenReplace={onOpenReplace}
                   />
                 );
               })}

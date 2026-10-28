@@ -1492,10 +1492,31 @@ export class LifeGoalRepository {
     templateId: string,
     templateTitle: string,
     durationMinutes: number = 0,
-    notes: string = ''
+    notes: string = '',
+    options?: {
+      isReplacement?: boolean;
+      linkedGoalId?: string;
+      replacesTemplateId?: string;
+      isReplaced?: boolean;
+    }
   ): Promise<LifeGoal[]> {
+    if (options?.isReplaced) {
+      return [];
+    }
+
     const all = this.getLocalLifeGoals(userId);
-    const matchingGoals = all.filter((g) => g.linkedTemplateIds?.includes(templateId));
+
+    let matchingGoals: LifeGoal[] = [];
+    if (options?.isReplacement) {
+      if (options.linkedGoalId) {
+        matchingGoals = all.filter((g) => g.id === options.linkedGoalId);
+      } else {
+        return [];
+      }
+    } else {
+      matchingGoals = all.filter((g) => g.linkedTemplateIds?.includes(templateId));
+    }
+
     if (matchingGoals.length === 0) return [];
 
     const updatedGoals: LifeGoal[] = [];

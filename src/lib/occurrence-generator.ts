@@ -83,6 +83,10 @@ export function generateDailyOccurrences(
       }
     }
 
+    const isReplaced = Boolean(override?.isReplaced);
+    const replacement = override?.replacementActivity;
+    const replacementReason = replacement?.reason;
+
     const startTime = override?.modifiedStartTime ?? template.startTime;
     const endTime = override?.modifiedEndTime ?? template.endTime;
     const title = override?.modifiedTitle ?? template.title;
@@ -94,12 +98,38 @@ export function generateDailyOccurrences(
     const completedStepIds = log?.completedStepIds ?? [];
     const comments = log?.comments ?? [];
 
+    // Synthesize log for replaced original block if no explicit log exists
+    let effectiveLog = log;
+    if (isReplaced) {
+      if (!effectiveLog) {
+        effectiveLog = {
+          id: `${targetDate}_${template.id}`,
+          userId: template.userId,
+          templateId: template.id,
+          date: targetDate,
+          status: (override?.partialDurationMinutes && override.partialDurationMinutes > 0) ? 'partial' : 'replaced',
+          actualDurationMinutes: override?.partialDurationMinutes ?? 0,
+          targetDurationMinutes: durationMinutes,
+          completionNotes: replacementReason ? `Replaced: ${replacementReason}` : 'Replaced by another activity',
+          completedStepIds: [],
+          comments: [],
+          updatedAt: override?.updatedAt ?? Date.now(),
+        };
+      } else if (effectiveLog.status === 'pending') {
+        effectiveLog = {
+          ...effectiveLog,
+          status: (override?.partialDurationMinutes && override.partialDurationMinutes > 0) ? 'partial' : 'replaced',
+          actualDurationMinutes: override?.partialDurationMinutes ?? effectiveLog.actualDurationMinutes ?? 0,
+        };
+      }
+    }
+
     occurrences.push({
       occurrenceId: `${template.id}_${targetDate}`,
       templateId: template.id,
       date: targetDate,
-      title,
-      category: template.category,
+      title: isReplaced ? (override?.originalActivitySnapshot?.title ?? template.title) : title,
+      category: isReplaced ? (override?.originalActivitySnapshot?.category ?? template.category) : template.category,
       startTime,
       endTime,
       durationMinutes,
@@ -115,9 +145,118 @@ export function generateDailyOccurrences(
       hasOverride: Boolean(override),
       isCancelled: false,
       isPostponed: Boolean(override?.isPostponed),
-      log,
+      isReplaced,
+      replacement,
+      replacementReason,
+      log: effectiveLog,
       template,
     });
+
+    // If this occurrence has an active replacement activity, synthesize the replacement occurrence
+    if (isReplaced && replacement) {
+      const replDuration = replacement.durationMinutes || calculateDuration(replacement.startTime, replacement.endTime);
+      const replTemplateId = replacement.id || `repl_tmpl_${template.id}`;
+      const replOccurrenceId = `replace_${template.id}_${targetDate}`;
+      const replLog = logMap.get(replTemplateId) || logMap.get(replOccurrenceId);
+
+      const replacementTemplate: RoutineTemplate = {
+        id: replTemplateId,
+        userId: template.userId,
+        title: replacement.title,
+        category: replacement.category || 'other',
+        startTime: replacement.startTime,
+        endTime: replacement.endTime,
+        isFixed: false,
+        recurrence: {
+          frequency: 'once',
+          startDate: targetDate,
+          daysOfWeek: [],
+          exceptions: [],
+        },
+        notifications: template.notifications || [],
+        steps: [],
+        notes: replacement.reason ? `Replacement for "${template.title}". Reason: ${replacement.reason}` : `Replacement for "${template.title}"`,
+        color: replacement.color || '#06b6d4',
+        timezone: template.timezone || 'Asia/Kolkata',
+        isArchived: false,
+        createdAt: override?.updatedAt ?? Date.now(),
+        updatedAt: override?.updatedAt ?? Date.now(),
+      };
+
+      occurrences.push({
+        occurrenceId: replOccurrenceId,
+        templateId: replTemplateId,
+        date: targetDate,
+        title: replacement.title,
+        category: replacement.category || 'other',
+        startTime: replacement.startTime,
+        endTime: replacement.endTime,
+        durationMinutes: replDuration,
+        isFixed: false,
+        notes: replacement.reason ? `Replacement for "${template.title}". Reason: ${replacement.reason}` : `Replacement for "${template.title}"`,
+        color: replacement.color || '#06b6d4',
+        notifications: template.notifications || [],
+        media: [],
+        steps: [],
+        completedStepIds: replLog?.completedStepIds ?? [],
+        comments: replLog?.comments ?? [],
+        hasOverride: true,
+        isCancelled: false,
+        isPostponed: false,
+        isReplacement: true,
+        replacesTemplateId: template.id,
+        replacesTitle: template.title,
+        replacementReason: replacement.reason,
+        linkedGoalId: replacement.linkedGoalId,
+        log: replLog,
+        template: replacementTemplate,
+      });
+    }
+
+    // If the original activity was rescheduled to another time slot today, synthesize the rescheduled occurrence
+    if (isReplaced && override?.rescheduledTo && override.rescheduledTo.date === targetDate) {
+      const resched = override.rescheduledTo;
+      const reschedDuration = calculateDuration(resched.startTime, resched.endTime);
+      const reschedOccurrenceId = `resched_${template.id}_${targetDate}`;
+      const reschedTemplateId = `resched_tmpl_${template.id}`;
+      const reschedLog = logMap.get(reschedTemplateId) || logMap.get(reschedOccurrenceId);
+
+      const reschedTemplate: RoutineTemplate = {
+        ...template,
+        id: reschedTemplateId,
+        startTime: resched.startTime,
+        endTime: resched.endTime,
+      };
+
+      occurrences.push({
+        occurrenceId: reschedOccurrenceId,
+        templateId: reschedTemplateId,
+        date: targetDate,
+        title: `${template.title} (Rescheduled)`,
+        category: template.category,
+        startTime: resched.startTime,
+        endTime: resched.endTime,
+        durationMinutes: reschedDuration,
+        isFixed: template.isFixed,
+        notes: `Rescheduled from ${template.startTime}–${template.endTime}`,
+        color: template.color,
+        notifications: template.notifications,
+        media: template.media,
+        steps: template.steps,
+        completedStepIds: reschedLog?.completedStepIds ?? [],
+        comments: reschedLog?.comments ?? [],
+        hasOverride: true,
+        isCancelled: false,
+        isPostponed: false,
+        isRescheduled: true,
+        rescheduledFrom: {
+          originalStartTime: template.startTime,
+          originalEndTime: template.endTime,
+        },
+        log: reschedLog,
+        template: reschedTemplate,
+      });
+    }
   }
 
   // Ensure that any log on targetDate whose template was not in the passed templates

@@ -25,6 +25,7 @@ import {
   X,
   FileText,
   ExternalLink,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { MusicServiceIcon } from '@/components/media/music-service-icons';
@@ -47,6 +48,7 @@ interface ActivityTimelineItemProps {
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
+  onOpenReplace?: (occurrence: ActivityOccurrence) => void;
   onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
   onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
   onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
@@ -62,11 +64,12 @@ export function ActivityTimelineItem({
   onPlayMedia,
   onExecuteAi,
   onToggleStep,
+  onOpenReplace,
   onAddComment,
   onUpdateComment,
   onDeleteComment,
 }: ActivityTimelineItemProps) {
-  const [showSteps, setShowSteps] = React.useState(true);
+  const [showSteps, setShowSteps] = React.useState(false);
   const [showComments, setShowComments] = React.useState(false);
   const [newCommentText, setNewCommentText] = React.useState('');
   const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
@@ -93,7 +96,11 @@ export function ActivityTimelineItem({
     }
   };
 
-  const status = occurrence.log?.status ?? 'pending';
+  const isReplaced = Boolean(occurrence.isReplaced || occurrence.log?.status === 'replaced');
+  const isReplacement = Boolean(occurrence.isReplacement);
+  const isRescheduled = Boolean(occurrence.isRescheduled);
+
+  const status = occurrence.log?.status ?? (isReplaced ? 'replaced' : isRescheduled ? 'rescheduled' : 'pending');
   const isCompleted = status === 'completed';
   const isSkipped = status === 'skipped';
   const isInProgress = status === 'in_progress';
@@ -138,6 +145,18 @@ export function ActivityTimelineItem({
       nodeBg: 'bg-purple-500',
       border: 'border-purple-500/30',
     },
+    replaced: {
+      badgeBg: 'bg-purple-950/80',
+      badgeText: 'text-purple-300 font-medium',
+      nodeBg: 'bg-purple-600',
+      border: 'border-purple-500/30 border-dashed',
+    },
+    rescheduled: {
+      badgeBg: 'bg-blue-950/80',
+      badgeText: 'text-blue-300 font-medium',
+      nodeBg: 'bg-blue-600',
+      border: 'border-blue-500/30',
+    },
   };
 
   const currentStyle = statusStyles[status];
@@ -145,6 +164,7 @@ export function ActivityTimelineItem({
 
   // Quick 1-tap completion toggle for mobile
   const handleToggleCompletion = () => {
+    if (isReplaced) return; // Replaced original cannot be toggled
     if (isCompleted) {
       onUpdateStatus(occurrence, 'pending');
     } else {
@@ -231,8 +251,12 @@ export function ActivityTimelineItem({
             <button
               type="button"
               onClick={handleToggleCompletion}
-              aria-label={isCompleted ? 'Mark as pending' : 'Mark as complete'}
-              className="min-w-[40px] min-h-[40px] -ml-1 -mt-0.5 flex items-center justify-center shrink-0 text-slate-400 hover:text-emerald-400 transition cursor-pointer active:scale-95"
+              disabled={isReplaced}
+              aria-label={isReplaced ? 'Replaced activity' : isCompleted ? 'Mark as pending' : 'Mark as complete'}
+              className={cn(
+                'min-w-[40px] min-h-[40px] -ml-1 -mt-0.5 flex items-center justify-center shrink-0 text-slate-400 hover:text-emerald-400 transition cursor-pointer active:scale-95',
+                isReplaced && 'cursor-not-allowed opacity-60'
+              )}
             >
               {isCompleted ? (
                 <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-slate-950 shadow-sm shadow-emerald-500/30">
@@ -241,6 +265,10 @@ export function ActivityTimelineItem({
               ) : isSkipped ? (
                 <div className="w-6 h-6 rounded-full border-2 border-rose-500/60 flex items-center justify-center text-rose-400">
                   <FastForward className="w-3.5 h-3.5" />
+                </div>
+              ) : isReplaced ? (
+                <div className="w-6 h-6 rounded-full border-2 border-purple-500/60 bg-purple-950/40 flex items-center justify-center text-purple-400" title="Replaced for today">
+                  <ArrowLeftRight className="w-3 h-3" />
                 </div>
               ) : (
                 <div className="w-6 h-6 rounded-full border-2 border-slate-600 hover:border-emerald-400 transition flex items-center justify-center group-hover:border-slate-400" />
@@ -255,7 +283,8 @@ export function ActivityTimelineItem({
                   className={cn(
                     'text-sm sm:text-base font-semibold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors leading-snug',
                     isCompleted && 'text-slate-400 line-through font-normal',
-                    isSkipped && 'text-slate-500 line-through italic'
+                    isSkipped && 'text-slate-500 line-through italic',
+                    isReplaced && 'text-slate-400 line-through italic'
                   )}
                 >
                   {occurrence.title}
@@ -263,6 +292,30 @@ export function ActivityTimelineItem({
 
                 {/* Desktop Badges */}
                 <div className="hidden sm:inline-flex items-center gap-1.5">
+                  {isReplaced && (
+                    <span
+                      title={occurrence.replacementReason ? `Replaced: ${occurrence.replacementReason}` : 'Replaced for today'}
+                      className="inline-flex items-center gap-1 text-[11px] text-purple-300 bg-purple-950/80 border border-purple-500/40 px-2 py-0.5 rounded-full font-medium"
+                    >
+                      <ArrowLeftRight className="w-2.5 h-2.5" /> Replaced
+                    </span>
+                  )}
+                  {isReplacement && (
+                    <span
+                      title={`Replacement for planned "${occurrence.replacesTitle || 'routine'}"`}
+                      className="inline-flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 px-2 py-0.5 rounded-full font-medium"
+                    >
+                      <Sparkles className="w-2.5 h-2.5" /> Replacement
+                    </span>
+                  )}
+                  {isRescheduled && (
+                    <span
+                      title="Rescheduled from original time"
+                      className="inline-flex items-center gap-1 text-[11px] text-blue-300 bg-blue-950/80 border border-blue-500/40 px-2 py-0.5 rounded-full font-medium"
+                    >
+                      <Clock className="w-2.5 h-2.5" /> Rescheduled
+                    </span>
+                  )}
                   {occurrence.isFixed && (
                     <span
                       title="Fixed Commitment"
@@ -271,7 +324,7 @@ export function ActivityTimelineItem({
                       <Lock className="w-2.5 h-2.5" /> Fixed
                     </span>
                   )}
-                  {occurrence.hasOverride && (
+                  {occurrence.hasOverride && !isReplaced && !isReplacement && !isRescheduled && (
                     <span
                       title="Single-day override active"
                       className="inline-flex items-center gap-1 text-[11px] text-purple-300 bg-purple-950/70 border border-purple-500/30 px-1.5 py-0.5 rounded"
@@ -282,6 +335,34 @@ export function ActivityTimelineItem({
                   <CategoryBadge category={occurrence.category} size="sm" />
                 </div>
               </div>
+
+              {/* Substitution Details Note */}
+              {isReplaced && occurrence.replacement && (
+                <div className="flex items-center gap-1.5 text-xs text-purple-300/90 pt-0.5">
+                  <ArrowLeftRight className="w-3 h-3 text-purple-400 shrink-0" />
+                  <span>
+                    Substituted by <strong className="text-white">&quot;{occurrence.replacement.title}&quot;</strong>
+                    {occurrence.replacementReason && ` (${occurrence.replacementReason})`}
+                  </span>
+                </div>
+              )}
+              {isReplacement && occurrence.replacesTitle && (
+                <div className="flex items-center gap-1.5 text-xs text-cyan-300/90 pt-0.5">
+                  <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span>
+                    Substituted for planned <strong className="text-white">&quot;{occurrence.replacesTitle}&quot;</strong>
+                    {occurrence.replacementReason && ` (${occurrence.replacementReason})`}
+                  </span>
+                </div>
+              )}
+              {isRescheduled && occurrence.rescheduledFrom && (
+                <div className="flex items-center gap-1.5 text-xs text-blue-300/90 pt-0.5">
+                  <Clock className="w-3 h-3 text-blue-400 shrink-0" />
+                  <span>
+                    Rescheduled from planned time <strong className="text-white">{formatTime12Hour(occurrence.rescheduledFrom.originalStartTime)}–{formatTime12Hour(occurrence.rescheduledFrom.originalEndTime)}</strong>
+                  </span>
+                </div>
+              )}
 
               {/* Status pill on mobile if special */}
               {status !== 'pending' && status !== 'completed' && (
@@ -433,6 +514,17 @@ export function ActivityTimelineItem({
                 </span>
               )}
             </button>
+
+            {!isReplaced && onOpenReplace && (
+              <button
+                type="button"
+                onClick={() => onOpenReplace(occurrence)}
+                title="Replace activity / Adapt routine"
+                className="min-w-[36px] min-h-[36px] p-2 rounded-xl text-slate-400 hover:text-blue-300 hover:bg-slate-800 transition flex items-center justify-center active:scale-95 cursor-pointer"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+              </button>
+            )}
 
             <button
               type="button"

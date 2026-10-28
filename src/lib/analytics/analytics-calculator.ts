@@ -35,6 +35,8 @@ export interface RoutineAnalyticsSummary {
     in_progress: number;
     skipped: number;
     pending: number;
+    replaced?: number;
+    rescheduled?: number;
   };
   categoryBreakdown: CategoryAnalytics[];
   goalFulfillments: GoalFulfillment[];
@@ -59,6 +61,8 @@ export class AnalyticsCalculator {
       in_progress: 0,
       skipped: 0,
       pending: 0,
+      replaced: 0,
+      rescheduled: 0,
     };
 
     const categoryMap = new Map<ActivityCategory, { planned: number; actual: number; count: number }>();
@@ -66,10 +70,13 @@ export class AnalyticsCalculator {
     for (const occ of occurrences) {
       if (occ.isCancelled) continue;
 
-      totalPlannedMinutes += occ.durationMinutes;
+      // Only count non-replacement occurrences toward initial planned routine minutes
+      if (!occ.isReplacement) {
+        totalPlannedMinutes += occ.durationMinutes;
+      }
 
       const log = occ.log;
-      const status = log?.status || 'pending';
+      const status = log?.status || (occ.isReplaced ? 'replaced' : 'pending');
 
       if (status in statusCounts) {
         statusCounts[status as keyof typeof statusCounts]++;
@@ -85,6 +92,8 @@ export class AnalyticsCalculator {
         actual = occ.durationMinutes;
       } else if (status === 'partial') {
         actual = Math.round(occ.durationMinutes * 0.5);
+      } else if (status === 'replaced' || status === 'rescheduled') {
+        actual = 0;
       }
 
       totalActualMinutes += actual;
@@ -92,7 +101,7 @@ export class AnalyticsCalculator {
       // Category breakdown
       const existing = categoryMap.get(occ.category) || { planned: 0, actual: 0, count: 0 };
       categoryMap.set(occ.category, {
-        planned: existing.planned + occ.durationMinutes,
+        planned: existing.planned + (occ.isReplacement ? 0 : occ.durationMinutes),
         actual: existing.actual + actual,
         count: existing.count + 1,
       });

@@ -94,6 +94,27 @@ export const RoutineTemplateSchema = z.object({
 });
 export type RoutineTemplate = z.infer<typeof RoutineTemplateSchema>;
 
+export const ReplacementActivityDetailsSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1, 'Title is required'),
+  category: ActivityCategorySchema.default('other'),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  durationMinutes: z.number().default(0),
+  reason: z.string().optional(),
+  linkedGoalId: z.string().optional(),
+  isTemporary: z.boolean().default(true),
+  color: z.string().optional(),
+});
+export type ReplacementActivityDetails = z.infer<typeof ReplacementActivityDetailsSchema>;
+
+export const RescheduleDetailsSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+});
+export type RescheduleDetails = z.infer<typeof RescheduleDetailsSchema>;
+
 export const OccurrenceOverrideSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -108,6 +129,20 @@ export const OccurrenceOverrideSchema = z.object({
   notes: z.string().optional(),
   modifiedMedia: z.array(MediaAttachmentSchema).optional(),
   modifiedSteps: z.array(TaskStepSchema).optional(),
+  isReplaced: z.boolean().optional(),
+  replacementActivity: ReplacementActivityDetailsSchema.optional(),
+  originalActivitySnapshot: z
+    .object({
+      title: z.string(),
+      category: ActivityCategorySchema,
+      startTime: z.string(),
+      endTime: z.string(),
+      durationMinutes: z.number(),
+      goalId: z.string().optional(),
+    })
+    .optional(),
+  partialDurationMinutes: z.number().optional(),
+  rescheduledTo: RescheduleDetailsSchema.optional(),
   updatedAt: z.number(),
 });
 export type OccurrenceOverride = z.infer<typeof OccurrenceOverrideSchema>;
@@ -119,6 +154,8 @@ export const ActivityStatusSchema = z.enum([
   'partial',
   'skipped',
   'postponed',
+  'replaced',
+  'rescheduled',
 ]);
 export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
 
@@ -186,6 +223,18 @@ export interface ActivityOccurrence {
   hasOverride: boolean;
   isCancelled: boolean;
   isPostponed: boolean;
+  isReplaced?: boolean;
+  replacement?: ReplacementActivityDetails;
+  replacementReason?: string;
+  isReplacement?: boolean;
+  replacesTemplateId?: string;
+  replacesTitle?: string;
+  isRescheduled?: boolean;
+  rescheduledFrom?: {
+    originalStartTime: string;
+    originalEndTime: string;
+  };
+  linkedGoalId?: string;
   log?: ActivityLog;
   template: RoutineTemplate;
 }

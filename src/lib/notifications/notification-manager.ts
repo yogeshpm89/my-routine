@@ -210,8 +210,15 @@ export class NotificationManager {
         // Skip cancelled occurrences
         if (occ.isCancelled) continue;
 
-        // Skip occurrences that are already completed or skipped
-        if (occ.log?.status === 'completed' || occ.log?.status === 'skipped') continue;
+        // Skip occurrences that are already completed, skipped, or replaced
+        if (
+          occ.log?.status === 'completed' ||
+          occ.log?.status === 'skipped' ||
+          occ.log?.status === 'replaced' ||
+          occ.isReplaced
+        ) {
+          continue;
+        }
 
         const notifRules = occ.notifications || [];
 
