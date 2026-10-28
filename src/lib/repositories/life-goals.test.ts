@@ -1,18 +1,31 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { LifeGoalRepository } from './life-goal-repository';
-import { getInitialLifeGoals } from '@/lib/seed-goals';
+import { getInitialLifeGoals, getSampleLifeGoals } from '@/lib/seed-goals';
 import { BackupService } from '@/lib/sync/backup-service';
 import { LifeGoal } from '@/types/goals';
 
 describe('Personal and Professional Life Goals System', () => {
   const userId = 'test-life-goals-user';
 
+  const setupSampleGoals = () => {
+    const goals = getSampleLifeGoals(userId);
+    LifeGoalRepository.saveLocalLifeGoals(userId, goals);
+    return goals;
+  };
+
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it('provides default initial goals matching user requirements', () => {
+  it('provides empty default initial goals to avoid unwanted mock seeding', () => {
     const defaultGoals = getInitialLifeGoals(userId);
+    expect(defaultGoals).toEqual([]);
+    const localGoals = LifeGoalRepository.getLocalLifeGoals(userId);
+    expect(localGoals).toEqual([]);
+  });
+
+  it('provides rich sample goals for templates/references', () => {
+    const defaultGoals = getSampleLifeGoals(userId);
     expect(defaultGoals.length).toBeGreaterThanOrEqual(3);
 
     const readingGoal = defaultGoals.find((g) => g.title.includes('Read 30 books'));
@@ -35,6 +48,76 @@ describe('Personal and Professional Life Goals System', () => {
     expect(weightGoal?.category).toBe('health_fitness');
     expect(weightGoal?.targetValue).toBe(5);
     expect(weightGoal?.unit).toBe('kg');
+  });
+
+  it('purges legacy seed goals from local storage', async () => {
+    const legacyGoals: LifeGoal[] = [
+      {
+        id: 'life_goal_read_30_books',
+        userId,
+        title: 'Read 30 books in 1 year',
+        domain: 'personal',
+        category: 'reading',
+        metricType: 'numeric',
+        startValue: 0,
+        currentValue: 8,
+        targetValue: 30,
+        unit: 'books',
+        phases: [],
+        lists: [],
+        experiences: [],
+        comments: [],
+        milestones: [],
+        progressLogs: [],
+        status: 'in_progress',
+        priority: 'high',
+        color: '#8b5cf6',
+        linkedTemplateIds: [],
+        startDate: '2026-01-01',
+        targetDate: '2026-12-31',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+      {
+        id: 'user_custom_goal_marathon',
+        userId,
+        title: 'Run a Half Marathon',
+        domain: 'personal',
+        category: 'health_fitness',
+        metricType: 'numeric',
+        startValue: 0,
+        currentValue: 5,
+        targetValue: 21,
+        unit: 'km',
+        phases: [],
+        lists: [],
+        experiences: [],
+        comments: [],
+        milestones: [],
+        progressLogs: [],
+        status: 'in_progress',
+        priority: 'high',
+        color: '#10b981',
+        linkedTemplateIds: [],
+        startDate: '2026-01-01',
+        targetDate: '2026-12-31',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    localStorage.setItem(`my_routine_life_goals_${userId}`, JSON.stringify(legacyGoals));
+
+    // getLocalLifeGoals filters out legacy seed goals
+    const filtered = LifeGoalRepository.getLocalLifeGoals(userId);
+    expect(filtered.some((g) => g.id === 'life_goal_read_30_books')).toBe(false);
+    expect(filtered.some((g) => g.id === 'user_custom_goal_marathon')).toBe(true);
+
+    // Explicit purge
+    await LifeGoalRepository.purgeLegacySeedGoals(userId);
+    const cleaned = LifeGoalRepository.getLocalLifeGoals(userId);
+    expect(cleaned.length).toBe(1);
+    expect(cleaned[0].id).toBe('user_custom_goal_marathon');
   });
 
   it('saves and retrieves a newly created life goal', async () => {
@@ -195,6 +278,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('exports and restores life goals via BackupService', () => {
+    setupSampleGoals();
     const backup = BackupService.exportAllData(userId);
     expect(backup.lifeGoals).toBeDefined();
     expect(backup.lifeGoals?.length).toBeGreaterThanOrEqual(3);
@@ -206,7 +290,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('manages goal checklist items (add, toggle, and delete)', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const bookGoal = defaultGoals[0];
 
     // Add item
@@ -240,7 +324,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('manages goal comments and reflections (add, edit, and delete)', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const bookGoal = defaultGoals[0];
 
     // Add comment
@@ -275,7 +359,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('records daily activity history and increments progress', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const bookGoal = defaultGoals[0];
     const initialProgress = bookGoal.currentValue;
 
@@ -301,7 +385,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('syncs completed daily routine activity to matching linked life goals', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const readingGoal = defaultGoals.find((g) => g.linkedTemplateIds?.includes('template_mindvalley'));
     expect(readingGoal).toBeDefined();
 
@@ -329,7 +413,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('manages flexible tracked items (books with pages, summary, audiobook link, local file path)', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const readingGoal = defaultGoals[0];
 
     // Add a new book
@@ -394,7 +478,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('manages course items with course links, notes, and custom properties', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const courseGoal = defaultGoals[1];
 
     const afterAdd = await LifeGoalRepository.addTrackedItem(userId, courseGoal.id, {
@@ -425,7 +509,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('manages goal-level custom fields and flexible links', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const goal = defaultGoals[0];
 
     // Add custom field
@@ -584,7 +668,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('logs experiences, reflections, and mood ratings in journal', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const goal = defaultGoals[0];
 
     // Add reflection entry
@@ -617,6 +701,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('retrieves goals via getLifeGoals and maintains action item list updates', async () => {
+    setupSampleGoals();
     const goals = await LifeGoalRepository.getLifeGoals(userId);
     expect(goals.length).toBeGreaterThanOrEqual(3);
 
@@ -657,7 +742,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('logs minor incremental progress on tracked items (+10 pages) with enriched audit log', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const readingGoal = defaultGoals[0]; // Read 30 books
     const deepWork = readingGoal.items?.find((i) => i.title.includes('Deep Work'));
     expect(deepWork).toBeDefined();
@@ -693,7 +778,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('automatically completes item and increments parent goal when totalUnits is reached', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const readingGoal = defaultGoals[0];
     const initialGoalCount = readingGoal.currentValue; // 8 books
 
@@ -734,7 +819,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('reverses minor progress and restores item units with undoProgressLog', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const readingGoal = defaultGoals[0];
     const deepWork = readingGoal.items?.find((i) => i.title.includes('Deep Work'));
     const initialUnits = deepWork!.currentUnits;
@@ -759,7 +844,7 @@ describe('Personal and Professional Life Goals System', () => {
   });
 
   it('reverses item completion and parent goal count upon undoProgressLog', async () => {
-    const defaultGoals = getInitialLifeGoals(userId);
+    const defaultGoals = setupSampleGoals();
     const readingGoal = defaultGoals[0];
     const initialGoalCount = readingGoal.currentValue;
 

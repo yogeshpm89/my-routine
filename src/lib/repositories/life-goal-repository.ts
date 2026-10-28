@@ -29,6 +29,12 @@ import {
 
 const STORAGE_KEY_PREFIX = 'my_routine_life_goals_';
 
+export const LEGACY_SEED_GOAL_IDS = new Set([
+  'life_goal_read_30_books',
+  'life_goal_genai_course',
+  'life_goal_lose_5kg',
+]);
+
 export class LifeGoalRepository {
   private static getLocalKey(userId: string): string {
     return `${STORAGE_KEY_PREFIX}${userId}`;
@@ -46,10 +52,12 @@ export class LifeGoalRepository {
           : null;
       if (guestRaw) {
         try {
-          const guestGoals = (JSON.parse(guestRaw) as LifeGoal[]).map((g) => ({
-            ...g,
-            userId,
-          }));
+          const guestGoals = (JSON.parse(guestRaw) as LifeGoal[])
+            .filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id))
+            .map((g) => ({
+              ...g,
+              userId,
+            }));
           this.saveLocalLifeGoals(userId, guestGoals);
           return guestGoals;
         } catch {
@@ -61,9 +69,63 @@ export class LifeGoalRepository {
       return initial;
     }
     try {
-      return JSON.parse(raw) as LifeGoal[];
+      const parsed = JSON.parse(raw) as LifeGoal[];
+      const filtered = parsed.filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id));
+      if (filtered.length !== parsed.length) {
+        this.saveLocalLifeGoals(userId, filtered);
+      }
+      return filtered;
     } catch {
       return getInitialLifeGoals(userId);
+    }
+  }
+
+  static async purgeLegacySeedGoals(userId: string): Promise<void> {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(this.getLocalKey(userId));
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as LifeGoal[];
+          const cleaned = parsed.filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id));
+          if (cleaned.length !== parsed.length) {
+            this.saveLocalLifeGoals(userId, cleaned);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const guestKey = this.getLocalKey('local-default-user');
+      const guestRaw = localStorage.getItem(guestKey);
+      if (guestRaw) {
+        try {
+          const parsed = JSON.parse(guestRaw) as LifeGoal[];
+          const cleaned = parsed.filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id));
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem(guestKey, JSON.stringify(cleaned));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const queue = MutationQueue.getQueue(userId);
+    const seedMutations = queue.filter(
+      (m) => m.collection === 'life_goals' && LEGACY_SEED_GOAL_IDS.has(m.docId)
+    );
+    for (const m of seedMutations) {
+      MutationQueue.dequeue(userId, m.id);
+    }
+
+    if (canSyncWithFirestore(userId)) {
+      for (const seedId of LEGACY_SEED_GOAL_IDS) {
+        try {
+          await deleteDoc(doc(db, `users/${userId}/life_goals`, seedId));
+        } catch {
+          // ignore if doc does not exist
+        }
+      }
     }
   }
 
@@ -1473,6 +1535,7 @@ export class LifeGoalRepository {
   }
 
   static async getLifeGoals(userId: string): Promise<LifeGoal[]> {
+    this.purgeLegacySeedGoals(userId).catch(console.warn);
     const local = this.getLocalLifeGoals(userId);
     if (canSyncWithFirestore(userId)) {
       try {
@@ -1481,6 +1544,10 @@ export class LifeGoalRepository {
         if (!snapshot.empty) {
           const remote: LifeGoal[] = [];
           snapshot.forEach((d) => {
+            if (LEGACY_SEED_GOAL_IDS.has(d.id)) {
+              deleteDoc(doc(db, `users/${userId}/life_goals`, d.id)).catch(console.warn);
+              return;
+            }
             const data = d.data() as LifeGoal;
             if (data.status !== 'archived') {
               remote.push(data);
@@ -1494,7 +1561,7 @@ export class LifeGoalRepository {
           const mergedMap = new Map<string, LifeGoal>();
           remote.forEach((g) => mergedMap.set(g.id, g));
           local.forEach((g) => {
-            if (pendingIds.has(g.id) || !mergedMap.has(g.id)) {
+            if ((pendingIds.has(g.id) || !mergedMap.has(g.id)) && !LEGACY_SEED_GOAL_IDS.has(g.id)) {
               mergedMap.set(g.id, g);
             }
           });
@@ -1502,7 +1569,8 @@ export class LifeGoalRepository {
           this.saveLocalLifeGoals(userId, merged);
           return merged;
         } else if (local.length > 0) {
-          for (const g of local) {
+          const nonSeedLocal = local.filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id));
+          for (const g of nonSeedLocal) {
             await setDoc(doc(db, `users/${userId}/life_goals`, g.id), cleanForFirestore(g)).catch(
               console.warn
             );
@@ -1512,7 +1580,7 @@ export class LifeGoalRepository {
         console.warn('Failed to fetch life goals from Firestore:', err);
       }
     }
-    return local;
+    return local.filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id));
   }
 
   static subscribeLifeGoals(
@@ -1520,6 +1588,7 @@ export class LifeGoalRepository {
     onData: (goals: LifeGoal[]) => void,
     onError?: (error: any) => void
   ): () => void {
+    this.purgeLegacySeedGoals(userId).catch(console.warn);
     const local = this.getLocalLifeGoals(userId);
     onData(local);
 
@@ -1535,6 +1604,10 @@ export class LifeGoalRepository {
           if (!snapshot.empty) {
             const remote: LifeGoal[] = [];
             snapshot.forEach((d) => {
+              if (LEGACY_SEED_GOAL_IDS.has(d.id)) {
+                deleteDoc(doc(db, `users/${userId}/life_goals`, d.id)).catch(console.warn);
+                return;
+              }
               const data = d.data() as LifeGoal;
               if (data.status !== 'archived') {
                 remote.push(data);
@@ -1549,7 +1622,7 @@ export class LifeGoalRepository {
             const mergedMap = new Map<string, LifeGoal>();
             remote.forEach((g) => mergedMap.set(g.id, g));
             localLifeGoals.forEach((g) => {
-              if (pendingIds.has(g.id) || !mergedMap.has(g.id)) {
+              if ((pendingIds.has(g.id) || !mergedMap.has(g.id)) && !LEGACY_SEED_GOAL_IDS.has(g.id)) {
                 mergedMap.set(g.id, g);
               }
             });
@@ -1557,7 +1630,8 @@ export class LifeGoalRepository {
             this.saveLocalLifeGoals(userId, merged);
             onData(merged);
           } else if (local.length > 0) {
-            for (const g of local) {
+            const nonSeedLocal = local.filter((g) => !LEGACY_SEED_GOAL_IDS.has(g.id));
+            for (const g of nonSeedLocal) {
               setDoc(doc(db, `users/${userId}/life_goals`, g.id), cleanForFirestore(g)).catch(
                 console.warn
               );

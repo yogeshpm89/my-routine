@@ -31,6 +31,8 @@ import {
   Calendar,
   Clock,
   ChevronDown,
+  ChevronUp,
+  ChevronRight,
   Edit2,
   Trash2,
   Sparkles,
@@ -206,6 +208,45 @@ export function GoalsDashboard({
 
   // Active sub-list inside lists tab: goalId -> listId
   const [activeSubLists, setActiveSubLists] = useState<Record<string, string>>({});
+
+  // Card collapse state: goalId -> boolean (true = collapsed to compact summary)
+  const [collapsedCards, setCollapsedCards] = useState<Record<string, boolean>>({});
+
+  // Phase collapse state: `${goalId}_${phaseId}` -> boolean (true = steps hidden)
+  const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
+
+  const toggleCardCollapse = (goalId: string) => {
+    setCollapsedCards((prev) => ({
+      ...prev,
+      [goalId]: !prev[goalId],
+    }));
+  };
+
+  const togglePhaseCollapse = (goalId: string, phaseId: string, defaultCollapsed: boolean) => {
+    const key = `${goalId}_${phaseId}`;
+    setCollapsedPhases((prev) => {
+      const current = prev[key] !== undefined ? prev[key] : defaultCollapsed;
+      return {
+        ...prev,
+        [key]: !current,
+      };
+    });
+  };
+
+  const toggleAllPhasesForGoal = (goalId: string, phases: GoalPhase[]) => {
+    const isAnyExpanded = phases.some((ph) => {
+      const key = `${goalId}_${ph.id}`;
+      const isCollapsed =
+        collapsedPhases[key] !== undefined ? collapsedPhases[key] : ph.status === 'completed';
+      return !isCollapsed;
+    });
+
+    const nextState: Record<string, boolean> = { ...collapsedPhases };
+    phases.forEach((ph) => {
+      nextState[`${goalId}_${ph.id}`] = isAnyExpanded;
+    });
+    setCollapsedPhases(nextState);
+  };
 
   // Inline inputs state
   const [checklistInputs, setChecklistInputs] = useState<Record<string, string>>({});
@@ -614,6 +655,7 @@ export function GoalsDashboard({
                 ? 'lists'
                 : 'tracker';
 
+            const isCardCollapsed = Boolean(collapsedCards[goal.id]);
             const activeTab = activeCardTabs[goal.id] || defaultTab;
 
             const phases = goal.phases || [];
@@ -694,6 +736,22 @@ export function GoalsDashboard({
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
                       <button
                         type="button"
+                        onClick={() => toggleCardCollapse(goal.id)}
+                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                          isCardCollapsed
+                            ? 'text-blue-400 bg-blue-950/60 border border-blue-500/30 hover:bg-blue-900/60'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title={isCardCollapsed ? 'Expand Details' : 'Collapse Card'}
+                      >
+                        {isCardCollapsed ? (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           setEditingGoal(goal);
                           setEditorOpen(true);
@@ -731,7 +789,7 @@ export function GoalsDashboard({
                   </div>
 
                   {/* Motivation Quote if specified */}
-                  {goal.motivation && (
+                  {!isCardCollapsed && goal.motivation && (
                     <div className="p-2.5 rounded-xl bg-slate-950/70 border border-indigo-500/25 text-xs text-indigo-200/90 flex items-start gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
                       <span className="italic leading-relaxed">"{goal.motivation}"</span>
@@ -813,7 +871,9 @@ export function GoalsDashboard({
                   </div>
                 </div>
 
-                {/* Sub-Navigation Tabs */}
+                {!isCardCollapsed && (
+                  <>
+                    {/* Sub-Navigation Tabs */}
                 <div className="flex items-center gap-1 border-b border-white/10 pb-1 text-xs overflow-x-auto no-scrollbar">
                   {/* Roadmap / Phases Tab */}
                   {(goal.phases?.length || 0) > 0 && (
@@ -944,6 +1004,22 @@ export function GoalsDashboard({
                         <span>Roadmap Stages & Deliverables</span>
                       </span>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 font-normal">
+                        <button
+                          type="button"
+                          onClick={() => toggleAllPhasesForGoal(goal.id, phases)}
+                          className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-semibold border border-slate-700 hover:border-purple-500/50 transition cursor-pointer"
+                        >
+                          {phases.some((ph) => {
+                            const key = `${goal.id}_${ph.id}`;
+                            const isCollapsed =
+                              collapsedPhases[key] !== undefined
+                                ? collapsedPhases[key]
+                                : ph.status === 'completed';
+                            return !isCollapsed;
+                          })
+                            ? 'Collapse All'
+                            : 'Expand All'}
+                        </button>
                         <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold">
                           {completedPhaseSteps}/{totalPhaseSteps} Steps Done
                         </span>
@@ -964,56 +1040,76 @@ export function GoalsDashboard({
                             : isPhaseDone
                             ? 100
                             : 0;
+                        const phaseKey = `${goal.id}_${ph.id}`;
+                        const isPhaseCollapsed =
+                          collapsedPhases[phaseKey] !== undefined
+                            ? collapsedPhases[phaseKey]
+                            : isPhaseDone;
 
                         return (
                           <div
                             key={ph.id}
-                            className={`p-3 rounded-xl border transition-all ${
+                            className={`rounded-xl border transition-all ${
                               isPhaseDone
                                 ? 'bg-purple-950/20 border-purple-500/30'
                                 : 'bg-slate-900/80 border-slate-800'
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
-                                  <span
-                                    className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold ${
-                                      isPhaseDone
-                                        ? 'bg-purple-500 text-white'
-                                        : 'bg-purple-500/20 text-purple-300'
-                                    }`}
-                                  >
-                                    {isPhaseDone ? '✓' : idx + 1}
-                                  </span>
-                                  <span className={isPhaseDone ? 'line-through text-slate-400' : ''}>
-                                    {ph.title}
-                                  </span>
-                                  {phaseTotalTasks > 0 && (
-                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 font-medium">
-                                      {phaseDoneTasks}/{phaseTotalTasks} steps ({phasePercent}%)
-                                    </span>
+                            <div
+                              onClick={() => togglePhaseCollapse(goal.id, ph.id, isPhaseDone)}
+                              className="p-3 flex items-start justify-between gap-2 cursor-pointer hover:bg-white/[0.02] rounded-xl transition"
+                            >
+                              <div className="flex items-start gap-2 flex-1 min-w-0">
+                                <div className="text-slate-400 mt-0.5 shrink-0">
+                                  {isPhaseCollapsed ? (
+                                    <ChevronRight className="w-4 h-4 text-purple-400" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4 text-purple-400" />
                                   )}
                                 </div>
-                                {ph.description && (
-                                  <p className="text-[11px] text-slate-400 mt-0.5 ml-7">
-                                    {ph.description}
-                                  </p>
-                                )}
-                                {phaseTotalTasks > 0 && (
-                                  <div className="ml-7 mt-1.5 w-32 bg-slate-800 rounded-full h-1 overflow-hidden">
-                                    <div
-                                      className="bg-purple-500 h-1 rounded-full transition-all duration-300"
-                                      style={{ width: `${phasePercent}%` }}
-                                    />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                                    <span
+                                      className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 ${
+                                        isPhaseDone
+                                          ? 'bg-purple-500 text-white'
+                                          : 'bg-purple-500/20 text-purple-300'
+                                      }`}
+                                    >
+                                      {isPhaseDone ? '✓' : idx + 1}
+                                    </span>
+                                    <span className={`truncate ${isPhaseDone ? 'line-through text-slate-400' : ''}`}>
+                                      {ph.title}
+                                    </span>
+                                    {phaseTotalTasks > 0 && (
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 font-medium shrink-0">
+                                        {phaseDoneTasks}/{phaseTotalTasks} steps ({phasePercent}%)
+                                      </span>
+                                    )}
                                   </div>
-                                )}
+                                  {ph.description && (
+                                    <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                                      {ph.description}
+                                    </p>
+                                  )}
+                                  {phaseTotalTasks > 0 && (
+                                    <div className="mt-1.5 w-32 bg-slate-800 rounded-full h-1 overflow-hidden">
+                                      <div
+                                        className="bg-purple-500 h-1 rounded-full transition-all duration-300"
+                                        style={{ width: `${phasePercent}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
                               </div>
 
                               <button
                                 type="button"
-                                onClick={() => onTogglePhaseStatus && onTogglePhaseStatus(goal.id, ph.id)}
-                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onTogglePhaseStatus && onTogglePhaseStatus(goal.id, ph.id);
+                                }}
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border transition cursor-pointer shrink-0 ${
                                   isPhaseDone
                                     ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                                     : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-purple-500'
@@ -1024,56 +1120,73 @@ export function GoalsDashboard({
                             </div>
 
                             {/* Phase steps */}
-                            <div className="ml-7 mt-2 space-y-1">
-                              {ph.tasks?.map((task) => (
-                                <div
-                                  key={task.id}
-                                  className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-950/60 border border-slate-800/80"
-                                >
-                                  <label className="flex items-center gap-2 cursor-pointer flex-1 truncate">
+                            {!isPhaseCollapsed && (
+                              <div className="px-3 pb-3 pt-0 ml-6 space-y-1">
+                                {ph.tasks?.map((task) => (
+                                  <div
+                                    key={task.id}
+                                    className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-950/60 border border-slate-800/80"
+                                  >
+                                    <label className="flex items-center gap-2 cursor-pointer flex-1 truncate">
+                                      <input
+                                        type="checkbox"
+                                        checked={task.isCompleted}
+                                        onChange={() =>
+                                          onTogglePhaseTask && onTogglePhaseTask(goal.id, ph.id, task.id)
+                                        }
+                                        className="w-3.5 h-3.5 rounded text-purple-600 bg-slate-900 border-slate-700 cursor-pointer"
+                                      />
+                                      <span
+                                        className={`text-[11px] truncate ${
+                                          task.isCompleted ? 'line-through text-slate-500' : 'text-slate-300'
+                                        }`}
+                                      >
+                                        {task.text}
+                                      </span>
+                                    </label>
+                                    {onDeletePhaseTask && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onDeletePhaseTask(goal.id, ph.id, task.id)}
+                                        className="text-slate-500 hover:text-rose-400 ml-1.5"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+
+                                {/* Quick add step */}
+                                {onAddPhaseTask && (
+                                  <div className="flex items-center gap-1.5 pt-1">
                                     <input
-                                      type="checkbox"
-                                      checked={task.isCompleted}
-                                      onChange={() =>
-                                        onTogglePhaseTask && onTogglePhaseTask(goal.id, ph.id, task.id)
+                                      type="text"
+                                      value={phaseTaskInputs[`${goal.id}_${ph.id}`] || ''}
+                                      onChange={(e) =>
+                                        setPhaseTaskInputs({
+                                          ...phaseTaskInputs,
+                                          [`${goal.id}_${ph.id}`]: e.target.value,
+                                        })
                                       }
-                                      className="w-3.5 h-3.5 rounded text-purple-600 bg-slate-900 border-slate-700 cursor-pointer"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const text = (phaseTaskInputs[`${goal.id}_${ph.id}`] || '').trim();
+                                          if (text) {
+                                            onAddPhaseTask(goal.id, ph.id, text);
+                                            setPhaseTaskInputs({
+                                              ...phaseTaskInputs,
+                                              [`${goal.id}_${ph.id}`]: '',
+                                            });
+                                          }
+                                        }
+                                      }}
+                                      placeholder="Add step to this phase..."
+                                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-0.5 text-white text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500"
                                     />
-                                    <span
-                                      className={`text-[11px] truncate ${
-                                        task.isCompleted ? 'line-through text-slate-500' : 'text-slate-300'
-                                      }`}
-                                    >
-                                      {task.text}
-                                    </span>
-                                  </label>
-                                  {onDeletePhaseTask && (
                                     <button
                                       type="button"
-                                      onClick={() => onDeletePhaseTask(goal.id, ph.id, task.id)}
-                                      className="text-slate-500 hover:text-rose-400 ml-1.5"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-
-                              {/* Quick add step */}
-                              {onAddPhaseTask && (
-                                <div className="flex items-center gap-1.5 pt-1">
-                                  <input
-                                    type="text"
-                                    value={phaseTaskInputs[`${goal.id}_${ph.id}`] || ''}
-                                    onChange={(e) =>
-                                      setPhaseTaskInputs({
-                                        ...phaseTaskInputs,
-                                        [`${goal.id}_${ph.id}`]: e.target.value,
-                                      })
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
+                                      onClick={() => {
                                         const text = (phaseTaskInputs[`${goal.id}_${ph.id}`] || '').trim();
                                         if (text) {
                                           onAddPhaseTask(goal.id, ph.id, text);
@@ -1082,30 +1195,15 @@ export function GoalsDashboard({
                                             [`${goal.id}_${ph.id}`]: '',
                                           });
                                         }
-                                      }
-                                    }}
-                                    placeholder="Add step to this phase..."
-                                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-0.5 text-white text-[11px] focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const text = (phaseTaskInputs[`${goal.id}_${ph.id}`] || '').trim();
-                                      if (text) {
-                                        onAddPhaseTask(goal.id, ph.id, text);
-                                        setPhaseTaskInputs({
-                                          ...phaseTaskInputs,
-                                          [`${goal.id}_${ph.id}`]: '',
-                                        });
-                                      }
-                                    }}
-                                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] rounded-lg"
-                                  >
-                                    Add
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                                      }}
+                                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] rounded-lg"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1896,6 +1994,26 @@ export function GoalsDashboard({
                         </button>
                       </div>
                     )}
+                  </div>
+                )}
+                  </>
+                )}
+
+                {/* Compact summary bar when card is collapsed */}
+                {isCardCollapsed && (
+                  <div className="pt-1 flex items-center justify-between text-xs text-slate-400">
+                    <span className="text-[11px] text-slate-400">
+                      {goal.phases?.length ? `${goal.phases.length} phases • ` : ''}
+                      {completedPhaseSteps}/{totalPhaseSteps} steps completed
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleCardCollapse(goal.id)}
+                      className="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Show Details</span>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
               </div>
