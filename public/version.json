@@ -1,16 +1,15 @@
 {
-  "version": "1.5.0",
-  "versionCode": 8,
+  "version": "1.6.0",
+  "versionCode": 9,
   "minSupportedVersion": "1.0.0",
-  "releaseDate": "2026-10-24",
-  "title": "v1.5.0 — Life Goals Minor & Incremental Progress Tracking",
+  "releaseDate": "2026-10-28",
+  "title": "v1.6.0 — Life Goal Milestones and Step-Level Phase Tracking",
   "changelog": [
-    "Life Goals Minor & Incremental Progress: Log granular item increments (pages, minutes, modules, lessons) directly from tracked item cards",
-    "1-Tap Quick Increments: Context-aware preset chips (+5, +10, +25 pages; +5m, +10m, +15m; +1, +2) for immediate progress updates",
-    "Dedicated Item Progress Modal: Log custom unit deltas or absolute values with reflection notes and custom dates",
-    "Deterministic Parent Roll-up: Automatically marks items completed and advances parent goal metrics when 100% target is reached",
-    "Audit History & 1-Click Undo: Track recent item progress in the Tracker tab with instant undo and rollback support",
-    "Items Tracking Mode: Direct support for item-based goal completion tracking with real-time recalculation"
+    "Key Milestones Tracking Mode: Track life goals through sequentially defined, high-impact milestones with target dates and descriptions",
+    "Inline Milestone Management: Add, edit, check off, and delete milestones directly from the goal card and goal editor",
+    "Step-Level Phase & Roadmap Tracking: Progress in roadmap/phases mode is now measured and recalculated per individual step inside phases rather than only at the whole-phase level",
+    "Step Progress Visualization: Live step counters and mini progress bars inside roadmap phases for immediate visual feedback",
+    "Rich Audit Trail: Automatically logs milestone achievements and step completions into the goal progress history with 1-tap undo capability"
   ],
   "apkUrl": "https://github.com/yogeshpm89/my-routine/releases/latest/download/my-routine-release.apk",
   "fileSizeBytes": 5242880,

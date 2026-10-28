@@ -831,4 +831,206 @@ describe('Personal and Professional Life Goals System', () => {
     expect(recalculated.currentValue).toBe(1);
     expect(recalculated.status).toBe('in_progress');
   });
+
+  it('tracks progress at step-level in phases tracking mode and synchronizes togglePhaseStatus', async () => {
+    const goal: LifeGoal = {
+      id: 'test_step_level_phases_goal',
+      userId,
+      title: 'Launch Cloud Native Microservices Architecture',
+      domain: 'professional',
+      category: 'Engineering',
+      priority: 'high',
+      trackingMode: 'phases',
+      startValue: 0,
+      currentValue: 0,
+      targetValue: 1,
+      unit: 'steps',
+      phases: [
+        {
+          id: 'ph_1',
+          title: 'Phase 1: Foundation',
+          status: 'in_progress',
+          tasks: [
+            { id: 'step_1_1', text: 'Set up Docker Kubernetes Cluster', isCompleted: false },
+            { id: 'step_1_2', text: 'Configure CI/CD Pipelines', isCompleted: false },
+          ],
+        },
+        {
+          id: 'ph_2',
+          title: 'Phase 2: Database Migration',
+          status: 'not_started',
+          tasks: [
+            { id: 'step_2_1', text: 'Schema migrations', isCompleted: false },
+          ],
+        },
+        {
+          id: 'ph_3',
+          title: 'Phase 3: Production Verification',
+          status: 'not_started',
+          tasks: [], // Bare phase without tasks counts as 1 deliverable unit
+        },
+      ],
+      startDate: '2026-10-01',
+      targetDate: '2026-12-31',
+      progressLogs: [],
+      status: 'in_progress',
+      color: '#6366f1',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const saved = await LifeGoalRepository.saveGoal(goal);
+    // 2 tasks in phase 1 + 1 task in phase 2 + 1 empty phase = 4 total steps
+    expect(saved.targetValue).toBe(4);
+    expect(saved.currentValue).toBe(0);
+
+    // Toggle step 1 in Phase 1
+    const afterStep1 = await LifeGoalRepository.togglePhaseTask(
+      userId,
+      goal.id,
+      'ph_1',
+      'step_1_1'
+    );
+    expect(afterStep1?.currentValue).toBe(1);
+    expect(afterStep1?.targetValue).toBe(4);
+    expect(afterStep1?.progressLogs?.[0].note).toContain('Completed step: Set up Docker Kubernetes Cluster');
+    expect(afterStep1?.progressLogs?.[0].stepId).toBe('step_1_1');
+
+    // Toggle step 2 in Phase 1
+    const afterStep2 = await LifeGoalRepository.togglePhaseTask(
+      userId,
+      goal.id,
+      'ph_1',
+      'step_1_2'
+    );
+    expect(afterStep2?.currentValue).toBe(2);
+    expect(afterStep2?.targetValue).toBe(4);
+
+    // Toggle Phase 2 status directly -> marks all sub-tasks complete and increments progress
+    const afterPhase2Done = await LifeGoalRepository.togglePhaseStatus(userId, goal.id, 'ph_2');
+    const ph2 = afterPhase2Done?.phases?.find((p) => p.id === 'ph_2');
+    expect(ph2?.status).toBe('completed');
+    expect(ph2?.tasks[0].isCompleted).toBe(true);
+    // 2 steps from ph_1 + 1 step from ph_2 = 3 steps done
+    expect(afterPhase2Done?.currentValue).toBe(3);
+    expect(afterPhase2Done?.targetValue).toBe(4);
+
+    // Toggle Phase 3 status (bare phase without tasks) -> completed gives 1 unit
+    const afterPhase3Done = await LifeGoalRepository.togglePhaseStatus(userId, goal.id, 'ph_3');
+    expect(afterPhase3Done?.currentValue).toBe(4);
+    expect(afterPhase3Done?.status).toBe('completed');
+  });
+
+  it('manages life goal milestones: add, toggle, update, delete, and auto-progress calculation', async () => {
+    const goal: LifeGoal = {
+      id: 'test_milestones_crud_goal',
+      userId,
+      title: 'Become Certified Solutions Architect',
+      domain: 'professional',
+      category: 'Certifications',
+      priority: 'high',
+      trackingMode: 'milestones',
+      metricType: 'milestone',
+      startValue: 0,
+      currentValue: 0,
+      targetValue: 1,
+      unit: 'milestones',
+      milestones: [],
+      startDate: '2026-10-01',
+      targetDate: '2027-04-01',
+      progressLogs: [],
+      status: 'in_progress',
+      color: '#06b6d4',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await LifeGoalRepository.saveGoal(goal);
+
+    // Add milestone 1
+    const withM1 = await LifeGoalRepository.addMilestone(userId, goal.id, {
+      title: 'Finish Cloud Practitioner prerequisite',
+      description: 'Score at least 850/1000 on practice exams',
+      targetDate: '2026-11-15',
+    });
+    expect(withM1?.milestones?.length).toBe(1);
+    expect(withM1?.milestones?.[0].title).toBe('Finish Cloud Practitioner prerequisite');
+    expect(withM1?.targetValue).toBe(1);
+    expect(withM1?.currentValue).toBe(0);
+
+    const m1Id = withM1!.milestones![0].id;
+
+    // Add milestone 2
+    const withM2 = await LifeGoalRepository.addMilestone(userId, goal.id, {
+      title: 'Complete 3 Full Mock Exams',
+      description: 'Passing score on all three',
+      targetDate: '2026-12-20',
+    });
+    expect(withM2?.milestones?.length).toBe(2);
+    expect(withM2?.targetValue).toBe(2);
+    expect(withM2?.currentValue).toBe(0);
+
+    const m2Id = withM2!.milestones![1].id;
+
+    // Update milestone 1
+    const withUpdatedM1 = await LifeGoalRepository.updateMilestone(userId, goal.id, m1Id, {
+      title: 'Finish Cloud Practitioner Exam (Passed)',
+    });
+    expect(withUpdatedM1?.milestones?.find((m) => m.id === m1Id)?.title).toBe('Finish Cloud Practitioner Exam (Passed)');
+
+    // Toggle milestone 1 to completed
+    const withToggledM1 = await LifeGoalRepository.toggleMilestone(userId, goal.id, m1Id);
+    expect(withToggledM1?.milestones?.find((m) => m.id === m1Id)?.isCompleted).toBe(true);
+    expect(withToggledM1?.currentValue).toBe(1);
+    expect(withToggledM1?.targetValue).toBe(2);
+    expect(withToggledM1?.progressLogs?.[0].milestoneId).toBe(m1Id);
+    expect(withToggledM1?.progressLogs?.[0].note).toContain('Achieved milestone');
+
+    // Toggle milestone 2 to completed -> Goal should auto-complete
+    const withToggledM2 = await LifeGoalRepository.toggleMilestone(userId, goal.id, m2Id);
+    expect(withToggledM2?.currentValue).toBe(2);
+    expect(withToggledM2?.targetValue).toBe(2);
+    expect(withToggledM2?.status).toBe('completed');
+
+    // Delete milestone 2
+    const withDeletedM2 = await LifeGoalRepository.deleteMilestone(userId, goal.id, m2Id);
+    expect(withDeletedM2?.milestones?.length).toBe(1);
+    expect(withDeletedM2?.targetValue).toBe(1);
+    expect(withDeletedM2?.currentValue).toBe(1);
+  });
+
+  it('recalculates progress for goals with trackingMode = milestones', () => {
+    const goal: LifeGoal = {
+      id: 'test_milestones_mode_recalc',
+      userId,
+      title: 'Run a Half Marathon',
+      domain: 'personal',
+      category: 'Fitness',
+      trackingMode: 'milestones',
+      metricType: 'milestone',
+      startValue: 0,
+      currentValue: 0,
+      targetValue: 3,
+      unit: 'milestones',
+      milestones: [
+        { id: 'm1', title: '5K without stopping', isCompleted: true, completedAt: Date.now() },
+        { id: 'm2', title: '10K race completed', isCompleted: true, completedAt: Date.now() },
+        { id: 'm3', title: '15K training run', isCompleted: false },
+        { id: 'm4', title: '21.1K Half Marathon Race Day', isCompleted: false },
+      ],
+      startDate: '2026-10-01',
+      targetDate: '2027-02-15',
+      progressLogs: [],
+      status: 'in_progress',
+      color: '#10b981',
+      createdAt: 0,
+      updatedAt: 0,
+    };
+
+    const recalculated = LifeGoalRepository.recalculateGoalProgress(goal);
+    expect(recalculated.targetValue).toBe(4);
+    expect(recalculated.currentValue).toBe(2);
+    expect(recalculated.status).toBe('in_progress');
+  });
 });
+

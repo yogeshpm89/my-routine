@@ -12,6 +12,7 @@ import {
   GoalPhase,
   GoalNamedList,
   GoalExperienceEntry,
+  GoalMilestone,
 } from '@/types/goals';
 import { RoutineTemplate } from '@/types/routine';
 import { GoalEditorModal } from './goal-editor-modal';
@@ -60,6 +61,7 @@ import {
   AlertCircle,
   Lightbulb,
   RotateCcw,
+  Milestone,
 } from 'lucide-react';
 
 interface GoalsDashboardProps {
@@ -70,6 +72,11 @@ interface GoalsDashboardProps {
   onDeleteGoal: (goalId: string) => Promise<void> | void;
   onLogProgress: (goalId: string, valueChange: number, note: string, date: string) => Promise<void> | void;
   onToggleMilestone: (goalId: string, milestoneId: string) => Promise<void> | void;
+  onAddMilestone?: (
+    goalId: string,
+    data: { title: string; description?: string; targetDate?: string }
+  ) => Promise<void> | void;
+  onDeleteMilestone?: (goalId: string, milestoneId: string) => Promise<void> | void;
   onAddChecklistItem?: (goalId: string, text: string) => Promise<void> | void;
   onToggleChecklistItem?: (goalId: string, itemId: string) => Promise<void> | void;
   onDeleteChecklistItem?: (goalId: string, itemId: string) => Promise<void> | void;
@@ -140,6 +147,8 @@ export function GoalsDashboard({
   onDeleteGoal,
   onLogProgress,
   onToggleMilestone,
+  onAddMilestone,
+  onDeleteMilestone,
   onAddChecklistItem,
   onToggleChecklistItem,
   onDeleteChecklistItem,
@@ -190,9 +199,9 @@ export function GoalsDashboard({
   // Clipboard feedback
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
-  // Card Tab state: goalId -> 'tracker' | 'phases' | 'lists' | 'experiences' | 'items' | 'activity' | 'notes'
+  // Card Tab state: goalId -> 'tracker' | 'phases' | 'milestones' | 'lists' | 'experiences' | 'items' | 'activity' | 'notes'
   const [activeCardTabs, setActiveCardTabs] = useState<
-    Record<string, 'tracker' | 'phases' | 'lists' | 'experiences' | 'items' | 'activity' | 'notes'>
+    Record<string, 'tracker' | 'phases' | 'milestones' | 'lists' | 'experiences' | 'items' | 'activity' | 'notes'>
   >({});
 
   // Active sub-list inside lists tab: goalId -> listId
@@ -202,6 +211,7 @@ export function GoalsDashboard({
   const [checklistInputs, setChecklistInputs] = useState<Record<string, string>>({});
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [phaseTaskInputs, setPhaseTaskInputs] = useState<Record<string, string>>({});
+  const [milestoneInputs, setMilestoneInputs] = useState<Record<string, { title: string; date: string }>>({});
   const [listItemInputs, setListItemInputs] = useState<Record<string, string>>({});
   const [newListInputs, setNewListInputs] = useState<Record<string, string>>({});
 
@@ -596,6 +606,8 @@ export function GoalsDashboard({
             const defaultTab =
               goal.trackingMode === 'phases' && goal.phases && goal.phases.length > 0
                 ? 'phases'
+                : (goal.trackingMode === 'milestones' || (goal.milestones && goal.milestones.length > 0))
+                ? 'milestones'
                 : goal.items && goal.items.length > 0
                 ? 'items'
                 : goal.lists && goal.lists.length > 0
@@ -605,7 +617,20 @@ export function GoalsDashboard({
             const activeTab = activeCardTabs[goal.id] || defaultTab;
 
             const phases = goal.phases || [];
+            const totalPhaseSteps = phases.reduce(
+              (acc, p) => acc + (p.tasks && p.tasks.length > 0 ? p.tasks.length : 1),
+              0
+            );
+            const completedPhaseSteps = phases.reduce((acc, p) => {
+              if (p.tasks && p.tasks.length > 0) {
+                return acc + p.tasks.filter((t) => t.isCompleted).length;
+              }
+              return acc + (p.status === 'completed' ? 1 : 0);
+            }, 0);
             const completedPhasesCount = phases.filter((p) => p.status === 'completed').length;
+
+            const milestones = goal.milestones || [];
+            const completedMilestonesCount = milestones.filter((m) => m.isCompleted).length;
 
             const lists = goal.lists || [];
             const totalListTasks = lists.reduce((acc, l) => acc + (l.items?.length || 0), 0);
@@ -733,7 +758,18 @@ export function GoalsDashboard({
                     <div className="flex items-baseline gap-1.5">
                       <strong className="text-base font-black text-white">{goal.currentValue}</strong>
                       <span className="text-slate-400 text-xs">
-                        / {goal.targetValue} {goal.unit || 'units'}
+                        /{' '}
+                        {goal.targetValue}{' '}
+                        {goal.unit ||
+                          (goal.trackingMode === 'phases'
+                            ? 'steps'
+                            : goal.trackingMode === 'milestones'
+                            ? 'milestones'
+                            : goal.trackingMode === 'tasks'
+                            ? 'tasks'
+                            : goal.trackingMode === 'items'
+                            ? 'items'
+                            : 'units')}
                       </span>
                       <span
                         className="text-xs font-bold px-2 py-0.5 rounded-md ml-1 shadow-sm"
@@ -791,7 +827,25 @@ export function GoalsDashboard({
                       }`}
                     >
                       <Layers className="w-3 h-3" />
-                      <span>Roadmap ({completedPhasesCount}/{phases.length})</span>
+                      <span>
+                        Roadmap ({completedPhaseSteps}/{totalPhaseSteps} steps)
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Key Milestones & Steps Tab */}
+                  {(goal.trackingMode === 'milestones' || (goal.milestones?.length || 0) > 0 || !(goal.phases?.length)) && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveCardTabs((prev) => ({ ...prev, [goal.id]: 'milestones' }))}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] flex items-center gap-1 shrink-0 ${
+                        activeTab === 'milestones'
+                          ? 'bg-amber-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Milestone className="w-3 h-3" />
+                      <span>Milestones ({completedMilestonesCount}/{milestones.length})</span>
                     </button>
                   )}
 
@@ -889,14 +943,28 @@ export function GoalsDashboard({
                         <Layers className="w-3.5 h-3.5" />
                         <span>Roadmap Stages & Deliverables</span>
                       </span>
-                      <span className="text-[11px] text-slate-400 font-normal">
-                        {completedPhasesCount}/{phases.length} Phases Done
-                      </span>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400 font-normal">
+                        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold">
+                          {completedPhaseSteps}/{totalPhaseSteps} Steps Done
+                        </span>
+                        <span>
+                          ({completedPhasesCount}/{phases.length} Phases)
+                        </span>
+                      </div>
                     </div>
 
                     <div className="space-y-2.5">
                       {phases.map((ph, idx) => {
                         const isPhaseDone = ph.status === 'completed';
+                        const phaseTotalTasks = ph.tasks?.length || 0;
+                        const phaseDoneTasks = ph.tasks?.filter((t) => t.isCompleted).length || 0;
+                        const phasePercent =
+                          phaseTotalTasks > 0
+                            ? Math.round((phaseDoneTasks / phaseTotalTasks) * 100)
+                            : isPhaseDone
+                            ? 100
+                            : 0;
+
                         return (
                           <div
                             key={ph.id}
@@ -908,7 +976,7 @@ export function GoalsDashboard({
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <div className="text-xs font-bold text-white flex items-center gap-2">
+                                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
                                   <span
                                     className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold ${
                                       isPhaseDone
@@ -921,11 +989,24 @@ export function GoalsDashboard({
                                   <span className={isPhaseDone ? 'line-through text-slate-400' : ''}>
                                     {ph.title}
                                   </span>
+                                  {phaseTotalTasks > 0 && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 font-medium">
+                                      {phaseDoneTasks}/{phaseTotalTasks} steps ({phasePercent}%)
+                                    </span>
+                                  )}
                                 </div>
                                 {ph.description && (
                                   <p className="text-[11px] text-slate-400 mt-0.5 ml-7">
                                     {ph.description}
                                   </p>
+                                )}
+                                {phaseTotalTasks > 0 && (
+                                  <div className="ml-7 mt-1.5 w-32 bg-slate-800 rounded-full h-1 overflow-hidden">
+                                    <div
+                                      className="bg-purple-500 h-1 rounded-full transition-all duration-300"
+                                      style={{ width: `${phasePercent}%` }}
+                                    />
+                                  </div>
                                 )}
                               </div>
 
@@ -1029,6 +1110,180 @@ export function GoalsDashboard({
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* --- TAB CONTENT: KEY MILESTONES & STEPS --- */}
+                {activeTab === 'milestones' && (
+                  <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+                      <span className="flex items-center gap-1.5">
+                        <Milestone className="w-3.5 h-3.5" />
+                        <span>Key Milestones & Steps</span>
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-normal">
+                        {completedMilestonesCount}/{milestones.length} Completed
+                      </span>
+                    </div>
+
+                    {/* Milestones Progress Bar */}
+                    {milestones.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-amber-500 to-amber-400 h-1.5 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.round(
+                                (completedMilestonesCount / Math.max(1, milestones.length)) * 100
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Milestones list */}
+                    <div className="space-y-1.5">
+                      {milestones.length === 0 ? (
+                        <div className="text-center py-6 px-3 rounded-lg border border-dashed border-slate-800 bg-slate-900/30">
+                          <Milestone className="w-6 h-6 text-slate-600 mx-auto mb-1.5" />
+                          <p className="text-xs text-slate-400 font-medium">No milestones yet</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Add intermediate checkpoints below to track steps closer to your final goal.
+                          </p>
+                        </div>
+                      ) : (
+                        milestones.map((ms, idx) => (
+                          <div
+                            key={ms.id}
+                            className={`flex items-start justify-between gap-2 text-xs py-2 px-2.5 rounded-xl border transition-all ${
+                              ms.isCompleted
+                                ? 'bg-amber-950/20 border-amber-500/25'
+                                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <label className="flex items-start gap-2.5 cursor-pointer flex-1 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={ms.isCompleted}
+                                onChange={() => onToggleMilestone && onToggleMilestone(goal.id, ms.id)}
+                                className="mt-0.5 w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-400 cursor-pointer"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span
+                                    className={`text-xs font-medium truncate ${
+                                      ms.isCompleted ? 'line-through text-slate-500' : 'text-slate-200'
+                                    }`}
+                                  >
+                                    {ms.title}
+                                  </span>
+                                  {ms.targetDate && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700/60 flex items-center gap-0.5">
+                                      <Calendar className="w-2.5 h-2.5" />
+                                      <span>{ms.targetDate}</span>
+                                    </span>
+                                  )}
+                                  {ms.isCompleted && (
+                                    <span className="text-[10px] text-amber-400 font-semibold">Done ✓</span>
+                                  )}
+                                </div>
+                                {ms.description && (
+                                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                                    {ms.description}
+                                  </p>
+                                )}
+                              </div>
+                            </label>
+
+                            {onDeleteMilestone && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteMilestone(goal.id, ms.id)}
+                                className="text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                                title="Delete milestone"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Inline Quick Add Milestone */}
+                    {onAddMilestone && (
+                      <div className="pt-1 space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={milestoneInputs[goal.id]?.title || ''}
+                            onChange={(e) =>
+                              setMilestoneInputs({
+                                ...milestoneInputs,
+                                [goal.id]: {
+                                  title: e.target.value,
+                                  date: milestoneInputs[goal.id]?.date || '',
+                                },
+                              })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const current = milestoneInputs[goal.id];
+                                const text = (current?.title || '').trim();
+                                if (text) {
+                                  onAddMilestone(goal.id, {
+                                    title: text,
+                                    targetDate: current?.date || undefined,
+                                  });
+                                  setMilestoneInputs({
+                                    ...milestoneInputs,
+                                    [goal.id]: { title: '', date: '' },
+                                  });
+                                }
+                              }
+                            }}
+                            placeholder="Add small milestone to move closer to goal..."
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                          <input
+                            type="date"
+                            value={milestoneInputs[goal.id]?.date || ''}
+                            onChange={(e) =>
+                              setMilestoneInputs({
+                                ...milestoneInputs,
+                                [goal.id]: {
+                                  title: milestoneInputs[goal.id]?.title || '',
+                                  date: e.target.value,
+                                },
+                              })
+                            }
+                            className="w-28 bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-1 text-white text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const current = milestoneInputs[goal.id];
+                              const text = (current?.title || '').trim();
+                              if (text) {
+                                onAddMilestone(goal.id, {
+                                  title: text,
+                                  targetDate: current?.date || undefined,
+                                });
+                                setMilestoneInputs({
+                                  ...milestoneInputs,
+                                  [goal.id]: { title: '', date: '' },
+                                });
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-medium rounded-lg transition cursor-pointer shrink-0"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

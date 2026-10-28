@@ -11,6 +11,7 @@ import {
   GoalPhase,
   GoalNamedList,
   GoalChecklistItem,
+  GoalMilestone,
 } from '@/types/goals';
 import { RoutineTemplate } from '@/types/routine';
 import { getTodayDateString, addDays } from '@/lib/time-utils';
@@ -38,6 +39,8 @@ import {
   Scale,
   Rocket,
   Check,
+  Milestone,
+  Flag,
 } from 'lucide-react';
 
 interface GoalEditorModalProps {
@@ -317,8 +320,14 @@ export function GoalEditorModal({
   // Inspiration Drawer
   const [showInspiration, setShowInspiration] = useState(false);
 
+  // Modular Elements: Milestones
+  const [milestones, setMilestones] = useState<GoalMilestone[]>([]);
+  const [newMilestoneTitle, setNewMilestoneTitle] = useState('');
+  const [newMilestoneDate, setNewMilestoneDate] = useState('');
+  const [newMilestoneDesc, setNewMilestoneDesc] = useState('');
+
   // Active section tab in modal
-  const [activeTab, setActiveTab] = useState<'basics' | 'phases' | 'lists' | 'tracking' | 'routines'>('basics');
+  const [activeTab, setActiveTab] = useState<'basics' | 'tracking' | 'milestones' | 'phases' | 'lists' | 'routines'>('basics');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -369,6 +378,7 @@ export function GoalEditorModal({
       setUnit(initialGoal.unit || '');
 
       setLinkedTemplateIds(initialGoal.linkedTemplateIds || []);
+      setMilestones(initialGoal.milestones || []);
       setAutoTrackFromActivities(initialGoal.autoTrackFromActivities ?? true);
       setShowInspiration(false);
     } else {
@@ -386,6 +396,7 @@ export function GoalEditorModal({
       setTargetDate(addDays(today, 90));
       setTimeframeLabel('3 months');
       setPhases([]);
+      setMilestones([]);
       setLists([
         {
           id: 'list_primary',
@@ -522,6 +533,43 @@ export function GoalEditorModal({
     );
   };
 
+  // --- Milestone Handlers ---
+  const handleAddMilestone = () => {
+    const trimmedTitle = newMilestoneTitle.trim();
+    if (!trimmedTitle) return;
+    const newMs: GoalMilestone = {
+      id: `ms_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: trimmedTitle,
+      description: newMilestoneDesc.trim() || undefined,
+      targetDate: newMilestoneDate || undefined,
+      isCompleted: false,
+    };
+    setMilestones([...milestones, newMs]);
+    setNewMilestoneTitle('');
+    setNewMilestoneDate('');
+    setNewMilestoneDesc('');
+  };
+
+  const handleRemoveMilestone = (msId: string) => {
+    setMilestones(milestones.filter((m) => m.id !== msId));
+  };
+
+  const handleToggleMilestone = (msId: string) => {
+    setMilestones(
+      milestones.map((m) => {
+        if (m.id === msId) {
+          const nextDone = !m.isCompleted;
+          return {
+            ...m,
+            isCompleted: nextDone,
+            completedAt: nextDone ? Date.now() : undefined,
+          };
+        }
+        return m;
+      })
+    );
+  };
+
   const toggleLinkedTemplate = (templateId: string) => {
     setLinkedTemplateIds((prev) =>
       prev.includes(templateId) ? prev.filter((id) => id !== templateId) : [...prev, templateId]
@@ -549,8 +597,21 @@ export function GoalEditorModal({
     let parsedCurrent = parseFloat(currentValue) || 0;
 
     if (trackingMode === 'phases') {
-      parsedTarget = phases.length > 0 ? phases.length : 1;
-      parsedCurrent = phases.filter((p) => p.status === 'completed').length;
+      const totalSteps = phases.reduce(
+        (acc, p) => acc + (p.tasks && p.tasks.length > 0 ? p.tasks.length : 1),
+        0
+      );
+      const completedSteps = phases.reduce((acc, p) => {
+        if (p.tasks && p.tasks.length > 0) {
+          return acc + p.tasks.filter((t) => t.isCompleted).length;
+        }
+        return acc + (p.status === 'completed' ? 1 : 0);
+      }, 0);
+      parsedTarget = totalSteps > 0 ? totalSteps : 1;
+      parsedCurrent = completedSteps;
+    } else if (trackingMode === 'milestones') {
+      parsedTarget = milestones.length > 0 ? milestones.length : 1;
+      parsedCurrent = milestones.filter((m) => m.isCompleted).length;
     } else if (trackingMode === 'tasks') {
       const allTasks = lists.flatMap((l) => l.items || []);
       if (allTasks.length > 0) {
@@ -580,7 +641,7 @@ export function GoalEditorModal({
         lists,
         experiences: initialGoal?.experiences || [],
         checklist: backwardChecklist,
-        milestones: initialGoal?.milestones || [],
+        milestones,
         comments: initialGoal?.comments || [],
         items: initialGoal?.items || [],
         customFields: initialGoal?.customFields || [],
@@ -694,6 +755,19 @@ export function GoalEditorModal({
           >
             <Target className="w-3.5 h-3.5" />
             <span>Tracking Mode</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('milestones')}
+            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+              activeTab === 'milestones'
+                ? 'border-indigo-500 text-indigo-400 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Milestone className="w-3.5 h-3.5" />
+            <span>Milestones ({milestones.length})</span>
           </button>
 
           <button
@@ -980,6 +1054,12 @@ export function GoalEditorModal({
                       desc: 'Progress is calculated from completed tasks across your lists.',
                     },
                     {
+                      id: 'milestones' as GoalTrackingMode,
+                      icon: <Milestone className="w-5 h-5 text-amber-400" />,
+                      title: 'Key Milestones & Steps',
+                      desc: 'Progress advances forward as small milestones are completed step-by-step.',
+                    },
+                    {
                       id: 'phases' as GoalTrackingMode,
                       icon: <Layers className="w-5 h-5 text-purple-400" />,
                       title: 'Roadmap & Phases',
@@ -1034,6 +1114,28 @@ export function GoalEditorModal({
                 </div>
               </div>
 
+              {/* If Milestones Mode is chosen, show quick summary / hint */}
+              {trackingMode === 'milestones' && (
+                <div className="p-4 rounded-xl bg-slate-950/70 border border-amber-500/30 flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                      <Milestone className="w-4 h-4" />
+                      <span>{milestones.length} Small Milestones Defined</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Target progress is calculated automatically ({milestones.filter((m) => m.isCompleted).length} / {milestones.length || 1} completed).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('milestones')}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 text-xs font-medium border border-amber-500/30 transition whitespace-nowrap cursor-pointer"
+                  >
+                    Manage Milestones →
+                  </button>
+                </div>
+              )}
+
               {/* If Metric Mode is chosen, show optional numeric target inputs */}
               {trackingMode === 'metric' && (
                 <div className="p-4 rounded-xl bg-slate-950/70 border border-emerald-500/30 space-y-3">
@@ -1079,6 +1181,144 @@ export function GoalEditorModal({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB: MILESTONES & STEPS */}
+          {activeTab === 'milestones' && (
+            <div className="space-y-4 animate-in fade-in-50 duration-150">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Small Milestones & Key Steps</h3>
+                  <p className="text-xs text-slate-400">
+                    Break down your ambition into tangible checkpoints that move you closer to the final goal.
+                  </p>
+                </div>
+                <div className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 font-medium">
+                  {milestones.filter((m) => m.isCompleted).length} of {milestones.length} Completed
+                </div>
+              </div>
+
+              {/* Add New Milestone Input Form */}
+              <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+                <div className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add a Small Milestone</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={newMilestoneTitle}
+                    onChange={(e) => setNewMilestoneTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddMilestone();
+                      }
+                    }}
+                    placeholder="Milestone title (e.g. Prototype complete)..."
+                    className="sm:col-span-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <input
+                    type="date"
+                    value={newMilestoneDate}
+                    onChange={(e) => setNewMilestoneDate(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newMilestoneDesc}
+                    onChange={(e) => setNewMilestoneDesc(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddMilestone();
+                      }
+                    }}
+                    placeholder="Optional details or criteria..."
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddMilestone}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* List of Defined Milestones */}
+              <div className="space-y-2">
+                {milestones.length === 0 ? (
+                  <div className="text-center py-8 px-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40">
+                    <Milestone className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-400 font-medium">No milestones added yet</p>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                      Add small milestone targets above to mark progress as you conquer each step closer to your goal.
+                    </p>
+                  </div>
+                ) : (
+                  milestones.map((ms, idx) => (
+                    <div
+                      key={ms.id}
+                      className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 ${
+                        ms.isCompleted
+                          ? 'bg-amber-950/20 border-amber-500/30'
+                          : 'bg-slate-900/80 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={ms.isCompleted}
+                          onChange={() => handleToggleMilestone(ms.id)}
+                          className="mt-0.5 w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-400 cursor-pointer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`text-xs font-semibold ${
+                                ms.isCompleted ? 'line-through text-slate-400' : 'text-white'
+                              }`}
+                            >
+                              {idx + 1}. {ms.title}
+                            </span>
+                            {ms.targetDate && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-1">
+                                <Calendar className="w-2.5 h-2.5" />
+                                <span>{ms.targetDate}</span>
+                              </span>
+                            )}
+                            {ms.isCompleted && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-medium">
+                                Done ✓
+                              </span>
+                            )}
+                          </div>
+                          {ms.description && (
+                            <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">
+                              {ms.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMilestone(ms.id)}
+                        className="text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                        title="Delete milestone"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
 

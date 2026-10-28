@@ -8,6 +8,7 @@ export type GoalCategory = string;
 
 // Universal Tracking Modes
 export const GoalTrackingModeSchema = z.enum([
+  'milestones', // Step-by-step small milestones
   'phases',    // Multi-stage roadmap progression
   'tasks',     // Tasks & checklist completion %
   'metric',    // Traditional numeric target (books, kg, savings, etc.)
@@ -45,6 +46,8 @@ export type GoalPriority = z.infer<typeof GoalPrioritySchema>;
 export const GoalMilestoneSchema = z.object({
   id: z.string(),
   title: z.string().min(1, 'Milestone title is required'),
+  description: z.string().optional(),
+  targetDate: z.string().optional(),
   isCompleted: z.boolean().default(false),
   completedAt: z.number().optional(),
 });
@@ -62,7 +65,7 @@ export type GoalChecklistItem = z.infer<typeof GoalChecklistItemSchema>;
 export const GoalPhaseSchema = z.object({
   id: z.string(),
   title: z.string().min(1, 'Phase title is required'),
-  description: z.string().optional().default(''),
+  description: z.string().optional(),
   status: z.enum(['not_started', 'in_progress', 'completed']).default('not_started'),
   targetDate: z.string().optional(),
   tasks: z.array(GoalChecklistItemSchema).default([]),
@@ -128,6 +131,10 @@ export const GoalProgressLogSchema = z.object({
   phaseTitle: z.string().optional(),
   itemCurrentUnits: z.number().optional(),
   itemTotalUnits: z.number().optional(),
+  milestoneId: z.string().optional(),
+  milestoneTitle: z.string().optional(),
+  stepId: z.string().optional(),
+  stepTitle: z.string().optional(),
 });
 export type GoalProgressLog = z.infer<typeof GoalProgressLogSchema>;
 
