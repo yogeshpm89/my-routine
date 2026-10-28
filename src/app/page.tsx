@@ -424,6 +424,41 @@ export default function RoutineApp() {
     }
   };
 
+  const handleAddGoalMilestone = async (
+    goalId: string,
+    data: { title: string; description?: string; targetDate?: string }
+  ) => {
+    const updated = await LifeGoalRepository.addMilestone(userId, goalId, data);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Milestone added ✓');
+    }
+  };
+
+  const handleDeleteGoalMilestone = async (goalId: string, milestoneId: string) => {
+    const updated = await LifeGoalRepository.deleteMilestone(userId, goalId, milestoneId);
+    if (updated) {
+      setLifeGoals((prev) => {
+        const idx = prev.findIndex((g) => g.id === updated.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updated;
+          return copy;
+        }
+        return [...prev, updated];
+      });
+      showToast('Milestone removed');
+    }
+  };
+
   // Life Goal Checklist Handlers
   const handleAddGoalChecklistItem = async (goalId: string, text: string) => {
     const updated = await LifeGoalRepository.addChecklistItem(userId, goalId, text);
@@ -1798,6 +1833,8 @@ export default function RoutineApp() {
               onDeleteGoal={handleDeleteLifeGoal}
               onLogProgress={handleLogGoalProgress}
               onToggleMilestone={handleToggleGoalMilestone}
+              onAddMilestone={handleAddGoalMilestone}
+              onDeleteMilestone={handleDeleteGoalMilestone}
               onAddChecklistItem={handleAddGoalChecklistItem}
               onToggleChecklistItem={handleToggleGoalChecklistItem}
               onDeleteChecklistItem={handleDeleteGoalChecklistItem}

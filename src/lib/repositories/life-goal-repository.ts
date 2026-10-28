@@ -11,6 +11,7 @@ import {
   GoalPhase,
   GoalNamedList,
   GoalExperienceEntry,
+  GoalMilestone,
 } from '@/types/goals';
 import { getInitialLifeGoals } from '@/lib/seed-goals';
 import { getTodayDateString } from '@/lib/time-utils';
@@ -79,8 +80,24 @@ export class LifeGoalRepository {
     if (trackingMode === 'phases') {
       const phases = goal.phases || [];
       if (phases.length > 0) {
-        targetValue = phases.length;
-        currentValue = phases.filter((p) => p.status === 'completed').length;
+        const totalSteps = phases.reduce(
+          (acc, p) => acc + (p.tasks && p.tasks.length > 0 ? p.tasks.length : 1),
+          0
+        );
+        const completedSteps = phases.reduce((acc, p) => {
+          if (p.tasks && p.tasks.length > 0) {
+            return acc + p.tasks.filter((t) => t.isCompleted).length;
+          }
+          return acc + (p.status === 'completed' ? 1 : 0);
+        }, 0);
+        targetValue = totalSteps > 0 ? totalSteps : 1;
+        currentValue = completedSteps;
+      }
+    } else if (trackingMode === 'milestones' || goal.metricType === 'milestone') {
+      const milestones = goal.milestones || [];
+      if (milestones.length > 0) {
+        targetValue = milestones.length;
+        currentValue = milestones.filter((m) => m.isCompleted).length;
       }
     } else if (trackingMode === 'tasks') {
       const directChecklist = goal.checklist || [];
@@ -130,6 +147,7 @@ export class LifeGoalRepository {
       trackingMode: goal.trackingMode || 'tasks',
       checklist: goal.checklist || [],
       comments: goal.comments || [],
+      milestones: goal.milestones || [],
       updatedAt: Date.now(),
     };
 
@@ -209,9 +227,14 @@ export class LifeGoalRepository {
     const existing = all.find((g) => g.id === goalId);
     if (!existing) return null;
 
+    let toggledMilestoneTitle = '';
+    let becameCompleted = false;
+
     const updatedMilestones = (existing.milestones || []).map((m) => {
       if (m.id === milestoneId) {
         const nextDone = !m.isCompleted;
+        toggledMilestoneTitle = m.title;
+        becameCompleted = nextDone;
         return {
           ...m,
           isCompleted: nextDone,
@@ -222,19 +245,106 @@ export class LifeGoalRepository {
     });
 
     const completedCount = updatedMilestones.filter((m) => m.isCompleted).length;
-    const isAllDone = updatedMilestones.length > 0 && completedCount === updatedMilestones.length;
+
+    let nextLogs = existing.progressLogs || [];
+    if (becameCompleted && toggledMilestoneTitle) {
+      const logEntry: GoalProgressLog = {
+        id: `plog_ms_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        date: getTodayDateString(),
+        valueChange: 1,
+        currentValue: completedCount,
+        note: `Achieved milestone: ${toggledMilestoneTitle}`,
+        milestoneId,
+        milestoneTitle: toggledMilestoneTitle,
+        createdAt: Date.now(),
+      };
+      nextLogs = [logEntry, ...nextLogs];
+    }
 
     const updatedGoal: LifeGoal = {
       ...existing,
       milestones: updatedMilestones,
-      currentValue: completedCount,
-      targetValue: updatedMilestones.length || existing.targetValue,
-      status: isAllDone ? 'completed' : completedCount < updatedMilestones.length && existing.status === 'completed' ? 'in_progress' : existing.status,
+      progressLogs: nextLogs,
       updatedAt: Date.now(),
     };
 
-    await this.saveGoal(updatedGoal);
-    return updatedGoal;
+    return await this.saveGoal(updatedGoal);
+  }
+
+  static async addMilestone(
+    userId: string,
+    goalId: string,
+    data: { title: string; description?: string; targetDate?: string }
+  ): Promise<LifeGoal | null> {
+    const all = this.getLocalLifeGoals(userId);
+    const existing = all.find((g) => g.id === goalId);
+    if (!existing) return null;
+
+    const newMilestone: GoalMilestone = {
+      id: `ms_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: data.title.trim(),
+      description: data.description?.trim() || '',
+      targetDate: data.targetDate,
+      isCompleted: false,
+    };
+
+    const updatedMilestones = [...(existing.milestones || []), newMilestone];
+    const updatedGoal: LifeGoal = {
+      ...existing,
+      milestones: updatedMilestones,
+      updatedAt: Date.now(),
+    };
+
+    return await this.saveGoal(updatedGoal);
+  }
+
+  static async deleteMilestone(
+    userId: string,
+    goalId: string,
+    milestoneId: string
+  ): Promise<LifeGoal | null> {
+    const all = this.getLocalLifeGoals(userId);
+    const existing = all.find((g) => g.id === goalId);
+    if (!existing) return null;
+
+    const updatedMilestones = (existing.milestones || []).filter((m) => m.id !== milestoneId);
+    const updatedGoal: LifeGoal = {
+      ...existing,
+      milestones: updatedMilestones,
+      updatedAt: Date.now(),
+    };
+
+    return await this.saveGoal(updatedGoal);
+  }
+
+  static async updateMilestone(
+    userId: string,
+    goalId: string,
+    milestoneId: string,
+    updates: Partial<GoalMilestone>
+  ): Promise<LifeGoal | null> {
+    const all = this.getLocalLifeGoals(userId);
+    const existing = all.find((g) => g.id === goalId);
+    if (!existing) return null;
+
+    const updatedMilestones = (existing.milestones || []).map((m) => {
+      if (m.id === milestoneId) {
+        return {
+          ...m,
+          ...updates,
+          title: updates.title !== undefined ? updates.title.trim() : m.title,
+        };
+      }
+      return m;
+    });
+
+    const updatedGoal: LifeGoal = {
+      ...existing,
+      milestones: updatedMilestones,
+      updatedAt: Date.now(),
+    };
+
+    return await this.saveGoal(updatedGoal);
   }
 
   static async updateGoalStatus(
@@ -401,10 +511,17 @@ export class LifeGoalRepository {
     const updatedPhases: GoalPhase[] = (existing.phases || []).map((p) => {
       if (p.id === phaseId) {
         const nextStatus: GoalPhase['status'] = p.status === 'completed' ? 'in_progress' : 'completed';
+        const willBeComplete = nextStatus === 'completed';
+        const nextTasks = (p.tasks || []).map((t) => ({
+          ...t,
+          isCompleted: willBeComplete,
+          completedAt: willBeComplete ? (t.completedAt || Date.now()) : undefined,
+        }));
         return {
           ...p,
+          tasks: nextTasks,
           status: nextStatus,
-          completedAt: nextStatus === 'completed' ? Date.now() : undefined,
+          completedAt: willBeComplete ? Date.now() : undefined,
         };
       }
       return p;
@@ -483,11 +600,18 @@ export class LifeGoalRepository {
     const existing = all.find((g) => g.id === goalId);
     if (!existing) return null;
 
+    let phaseTitle = '';
+    let stepTitle = '';
+    let stepNowDone = false;
+
     const updatedPhases = (existing.phases || []).map((p) => {
       if (p.id === phaseId) {
+        phaseTitle = p.title;
         const nextTasks = (p.tasks || []).map((t) => {
           if (t.id === taskId) {
             const nextDone = !t.isCompleted;
+            stepTitle = t.text;
+            stepNowDone = nextDone;
             return {
               ...t,
               isCompleted: nextDone,
@@ -496,17 +620,42 @@ export class LifeGoalRepository {
           }
           return t;
         });
+
+        const nextStatus: GoalPhase['status'] =
+          p.status === 'not_started' && nextTasks.some((t) => t.isCompleted)
+            ? 'in_progress'
+            : p.status;
+
         return {
           ...p,
           tasks: nextTasks,
+          status: nextStatus,
         };
       }
       return p;
     });
 
+    let nextLogs = existing.progressLogs || [];
+    if (stepNowDone && stepTitle) {
+      const logEntry: GoalProgressLog = {
+        id: `plog_step_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        date: getTodayDateString(),
+        valueChange: 1,
+        currentValue: (existing.currentValue || 0) + 1,
+        note: `Completed step: ${stepTitle}${phaseTitle ? ` (${phaseTitle})` : ''}`,
+        phaseId,
+        phaseTitle,
+        stepId: taskId,
+        stepTitle,
+        createdAt: Date.now(),
+      };
+      nextLogs = [logEntry, ...nextLogs];
+    }
+
     const updatedGoal: LifeGoal = {
       ...existing,
       phases: updatedPhases,
+      progressLogs: nextLogs,
       updatedAt: Date.now(),
     };
 
