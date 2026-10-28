@@ -271,6 +271,7 @@ export class BackupService {
     LogRepository.saveLocalLogs(userId, []);
     GoalRepository.saveLocalGoals(userId, initialGoals);
     LifeGoalRepository.saveLocalLifeGoals(userId, initialLifeGoals);
+    LifeGoalRepository.purgeLegacySeedGoals(userId).catch(console.warn);
     DayTemplateRepository.saveLocalTemplates(userId, initialDayTemplates);
     DayTemplateRepository.saveLocalWeeklyPlanner(userId, initialPlanner);
     GoalProgressRepository.saveLocalEntries(userId, []);

@@ -2,12 +2,17 @@ import { LifeGoal } from '@/types/goals';
 import { getTodayDateString, addDays } from '@/lib/time-utils';
 
 export function getInitialLifeGoals(userId: string): LifeGoal[] {
+  // Production life goals start empty so unwanted mock goals are never auto-seeded.
+  return [];
+}
+
+export function getSampleLifeGoals(userId: string): LifeGoal[] {
   const today = getTodayDateString('Asia/Kolkata');
   const now = Date.now();
 
   return [
     {
-      id: 'life_goal_read_30_books',
+      id: 'sample_goal_read_30_books',
       userId,
       title: 'Read 30 books in 1 year',
       description: 'Expand knowledge across technology, psychology, leadership, and personal growth by reading 30 books this year.',
@@ -194,7 +199,7 @@ export function getInitialLifeGoals(userId: string): LifeGoal[] {
       updatedAt: now - 5 * 86400000,
     },
     {
-      id: 'life_goal_genai_course',
+      id: 'sample_goal_genai_course',
       userId,
       title: 'Complete Generative AI course in next 1-2 months',
       description: 'Master large language models, prompt engineering, RAG architectures, and fine-tuning to build modern AI agents.',
@@ -372,7 +377,7 @@ export function getInitialLifeGoals(userId: string): LifeGoal[] {
       updatedAt: now - 7 * 86400000,
     },
     {
-      id: 'life_goal_lose_5kg',
+      id: 'sample_goal_lose_5kg',
       userId,
       title: 'Lose 5 kg weight in 3 months',
       description: 'Achieve healthy weight loss through morning cardio, strength routine, and clean nutrition with a sustainable calorie deficit.',
