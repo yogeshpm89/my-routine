@@ -115,6 +115,23 @@ export const RescheduleDetailsSchema = z.object({
 });
 export type RescheduleDetails = z.infer<typeof RescheduleDetailsSchema>;
 
+export const DailyActivityGoalSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1, 'Goal text is required'),
+  lifeGoalId: z.string().optional(),
+  lifeGoalTitle: z.string().optional(),
+  phaseId: z.string().optional(),
+  phaseTitle: z.string().optional(),
+  phaseTaskId: z.string().optional(),
+  itemId: z.string().optional(),
+  itemTitle: z.string().optional(),
+  targetUnits: z.number().optional(),
+  unitLabel: z.string().optional(),
+  isCompleted: z.boolean().default(false),
+  completedAt: z.number().optional(),
+});
+export type DailyActivityGoal = z.infer<typeof DailyActivityGoalSchema>;
+
 export const OccurrenceOverrideSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -129,6 +146,7 @@ export const OccurrenceOverrideSchema = z.object({
   notes: z.string().optional(),
   modifiedMedia: z.array(MediaAttachmentSchema).optional(),
   modifiedSteps: z.array(TaskStepSchema).optional(),
+  dailyGoal: DailyActivityGoalSchema.optional(),
   isReplaced: z.boolean().optional(),
   replacementActivity: ReplacementActivityDetailsSchema.optional(),
   originalActivitySnapshot: z
@@ -180,6 +198,7 @@ export const ActivityLogSchema = z.object({
   completionNotes: z.string().default(''),
   completedStepIds: z.array(z.string()).optional(),
   comments: z.array(ActivityCommentSchema).optional(),
+  dailyGoal: DailyActivityGoalSchema.optional(),
   updatedAt: z.number(),
 });
 export type ActivityLog = z.infer<typeof ActivityLogSchema>;
@@ -219,6 +238,7 @@ export interface ActivityOccurrence {
   steps?: TaskStep[];
   completedStepIds?: string[];
   comments?: ActivityComment[];
+  dailyGoal?: DailyActivityGoal;
   aiActionId?: string;
   hasOverride: boolean;
   isCancelled: boolean;

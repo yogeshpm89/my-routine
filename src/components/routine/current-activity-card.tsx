@@ -31,6 +31,7 @@ import {
   Gauge,
   ExternalLink,
   ArrowLeftRight,
+  Target,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { MusicServiceIcon } from '@/components/media/music-service-icons';
@@ -48,6 +49,8 @@ interface CurrentActivityCardProps {
   ) => void;
   onOpenEditor: (occurrence: ActivityOccurrence) => void;
   onOpenReplace?: (occurrence: ActivityOccurrence) => void;
+  onSetDailyGoal?: (occurrence: ActivityOccurrence) => void;
+  onToggleDailyGoal?: (occurrence: ActivityOccurrence) => void;
   onPlayMedia?: (occurrence: ActivityOccurrence, mediaIndex?: number) => void;
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
@@ -63,6 +66,8 @@ export function CurrentActivityCard({
   onUpdateStatus,
   onOpenEditor,
   onOpenReplace,
+  onSetDailyGoal,
+  onToggleDailyGoal,
   onPlayMedia,
   onExecuteAi,
   onToggleStep,
@@ -312,6 +317,82 @@ export function CurrentActivityCard({
                   })}
                 </div>
               )}
+
+              {/* Daily Activity Goal Section on Current Activity */}
+              {currentOccurrence.dailyGoal ? (
+                <div className="mt-3 p-3 rounded-2xl bg-gradient-to-r from-blue-950/70 to-indigo-950/50 border border-blue-500/40 flex items-center justify-between gap-3 shadow-md">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleDailyGoal?.(currentOccurrence)}
+                      className={cn(
+                        'w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                        currentOccurrence.dailyGoal.isCompleted
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                          : 'border-blue-400/80 bg-blue-950/60 text-blue-300 hover:border-emerald-400'
+                      )}
+                      title={currentOccurrence.dailyGoal.isCompleted ? 'Goal completed! Click to mark incomplete' : 'Click to complete goal'}
+                    >
+                      {currentOccurrence.dailyGoal.isCompleted ? (
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      ) : (
+                        <Target className="w-3.5 h-3.5 text-blue-400" />
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                          <Target className="w-3 h-3" /> Target for this session:
+                        </span>
+                        {currentOccurrence.dailyGoal.lifeGoalTitle && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium truncate max-w-[180px]">
+                            {currentOccurrence.dailyGoal.lifeGoalTitle}
+                          </span>
+                        )}
+                        {currentOccurrence.dailyGoal.phaseTitle && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                            &bull; {currentOccurrence.dailyGoal.phaseTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                        className={cn(
+                          'text-sm font-bold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors truncate mt-0.5',
+                          currentOccurrence.dailyGoal.isCompleted && 'line-through text-slate-400 font-normal'
+                        )}
+                        title="Click to edit session goal"
+                      >
+                        {currentOccurrence.dailyGoal.text}
+                        {currentOccurrence.dailyGoal.targetUnits && (
+                          <span className="text-xs text-slate-300 font-normal ml-1">
+                            ({currentOccurrence.dailyGoal.targetUnits} {currentOccurrence.dailyGoal.unitLabel || 'units'})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-blue-300 hover:bg-blue-950/60 transition shrink-0 cursor-pointer"
+                    title="Edit session goal"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-300 hover:text-white bg-blue-950/50 hover:bg-blue-900/60 border border-blue-500/30 px-3 py-1.5 rounded-xl transition active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <Target className="w-3.5 h-3.5 text-blue-400" />
+                    <span>+ Set Goal for this Session</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Quick Status Action Buttons */}
@@ -453,6 +534,82 @@ export function CurrentActivityCard({
                   </button>
                 </div>
               )}
+
+              {/* Daily Activity Goal Section on Current Activity */}
+              {currentOccurrence.dailyGoal ? (
+                <div className="mt-3 p-3 rounded-2xl bg-gradient-to-r from-blue-950/70 to-indigo-950/50 border border-blue-500/40 flex items-center justify-between gap-3 shadow-md">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleDailyGoal?.(currentOccurrence)}
+                      className={cn(
+                        'w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                        currentOccurrence.dailyGoal.isCompleted
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                          : 'border-blue-400/80 bg-blue-950/60 text-blue-300 hover:border-emerald-400'
+                      )}
+                      title={currentOccurrence.dailyGoal.isCompleted ? 'Goal completed! Click to mark incomplete' : 'Click to complete goal'}
+                    >
+                      {currentOccurrence.dailyGoal.isCompleted ? (
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      ) : (
+                        <Target className="w-3.5 h-3.5 text-blue-400" />
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                          <Target className="w-3 h-3" /> Target for this session:
+                        </span>
+                        {currentOccurrence.dailyGoal.lifeGoalTitle && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium truncate max-w-[180px]">
+                            {currentOccurrence.dailyGoal.lifeGoalTitle}
+                          </span>
+                        )}
+                        {currentOccurrence.dailyGoal.phaseTitle && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                            &bull; {currentOccurrence.dailyGoal.phaseTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                        className={cn(
+                          'text-sm font-bold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors truncate mt-0.5',
+                          currentOccurrence.dailyGoal.isCompleted && 'line-through text-slate-400 font-normal'
+                        )}
+                        title="Click to edit session goal"
+                      >
+                        {currentOccurrence.dailyGoal.text}
+                        {currentOccurrence.dailyGoal.targetUnits && (
+                          <span className="text-xs text-slate-300 font-normal ml-1">
+                            ({currentOccurrence.dailyGoal.targetUnits} {currentOccurrence.dailyGoal.unitLabel || 'units'})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-blue-300 hover:bg-blue-950/60 transition shrink-0 cursor-pointer"
+                    title="Edit session goal"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-300 hover:text-white bg-blue-950/50 hover:bg-blue-900/60 border border-blue-500/30 px-3 py-1.5 rounded-xl transition active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <Target className="w-3.5 h-3.5 text-blue-400" />
+                    <span>+ Set Goal for this Session</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -551,6 +708,82 @@ export function CurrentActivityCard({
                     </button>
                   );
                 })}
+                </div>
+              )}
+
+              {/* Daily Activity Goal Section on Current Activity */}
+              {currentOccurrence.dailyGoal ? (
+                <div className="mt-3 p-3 rounded-2xl bg-gradient-to-r from-blue-950/70 to-indigo-950/50 border border-blue-500/40 flex items-center justify-between gap-3 shadow-md">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleDailyGoal?.(currentOccurrence)}
+                      className={cn(
+                        'w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                        currentOccurrence.dailyGoal.isCompleted
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                          : 'border-blue-400/80 bg-blue-950/60 text-blue-300 hover:border-emerald-400'
+                      )}
+                      title={currentOccurrence.dailyGoal.isCompleted ? 'Goal completed! Click to mark incomplete' : 'Click to complete goal'}
+                    >
+                      {currentOccurrence.dailyGoal.isCompleted ? (
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      ) : (
+                        <Target className="w-3.5 h-3.5 text-blue-400" />
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                          <Target className="w-3 h-3" /> Target for this session:
+                        </span>
+                        {currentOccurrence.dailyGoal.lifeGoalTitle && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium truncate max-w-[180px]">
+                            {currentOccurrence.dailyGoal.lifeGoalTitle}
+                          </span>
+                        )}
+                        {currentOccurrence.dailyGoal.phaseTitle && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                            &bull; {currentOccurrence.dailyGoal.phaseTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                        className={cn(
+                          'text-sm font-bold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors truncate mt-0.5',
+                          currentOccurrence.dailyGoal.isCompleted && 'line-through text-slate-400 font-normal'
+                        )}
+                        title="Click to edit session goal"
+                      >
+                        {currentOccurrence.dailyGoal.text}
+                        {currentOccurrence.dailyGoal.targetUnits && (
+                          <span className="text-xs text-slate-300 font-normal ml-1">
+                            ({currentOccurrence.dailyGoal.targetUnits} {currentOccurrence.dailyGoal.unitLabel || 'units'})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-blue-300 hover:bg-blue-950/60 transition shrink-0 cursor-pointer"
+                    title="Edit session goal"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(currentOccurrence)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-300 hover:text-white bg-blue-950/50 hover:bg-blue-900/60 border border-blue-500/30 px-3 py-1.5 rounded-xl transition active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <Target className="w-3.5 h-3.5 text-blue-400" />
+                    <span>+ Set Goal for this Session</span>
+                  </button>
                 </div>
               )}
             </div>

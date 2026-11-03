@@ -12,6 +12,7 @@ import {
   GoalTarget,
   ReplacementActivityDetails,
   RescheduleDetails,
+  DailyActivityGoal,
 } from '@/types/routine';
 import { RoutineRepository } from '@/lib/repositories/routine-repository';
 import { OverrideRepository } from '@/lib/repositories/override-repository';
@@ -56,6 +57,7 @@ import { InAppUpdateModal } from '@/components/updates/in-app-update-modal';
 import { HolidayService } from '@/lib/holidays/holiday-service';
 import { SkipCompleteRoutineModal } from '@/components/routine/skip-complete-routine-modal';
 import { ReplaceBlockDialog } from '@/components/routine/replace-block-dialog';
+import { SetDailyGoalModal } from '@/components/routine/set-daily-goal-modal';
 import { LifeGoal, GoalTrackedItem, GoalExperienceEntry } from '@/types/goals';
 import { LifeGoalRepository } from '@/lib/repositories/life-goal-repository';
 import { GoalsDashboard } from '@/components/goals/goals-dashboard';
@@ -136,6 +138,10 @@ export default function RoutineApp() {
   // Replace block dialog state
   const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
   const [replacingOccurrence, setReplacingOccurrence] = useState<ActivityOccurrence | null>(null);
+
+  // Daily activity goal modal state
+  const [dailyGoalModalOpen, setDailyGoalModalOpen] = useState(false);
+  const [dailyGoalOccurrence, setDailyGoalOccurrence] = useState<ActivityOccurrence | null>(null);
 
   // Speedometer modal state
   const [speedometerOpen, setSpeedometerOpen] = useState(false);
@@ -1149,6 +1155,7 @@ export default function RoutineApp() {
           linkedGoalId: occurrence.linkedGoalId,
           replacesTemplateId: occurrence.replacesTemplateId,
           isReplaced: occurrence.isReplaced,
+          dailyGoal: occurrence.dailyGoal,
         }
       ).then((updatedGoals) => {
         if (updatedGoals.length > 0) {
@@ -1166,6 +1173,92 @@ export default function RoutineApp() {
       }).catch((err) => {
         console.warn('Failed to sync completed routine to life goals:', err);
       });
+
+      // Also mark dailyGoal as completed if attached
+      if (occurrence.dailyGoal && !occurrence.dailyGoal.isCompleted) {
+        const updatedGoal: DailyActivityGoal = {
+          ...occurrence.dailyGoal,
+          isCompleted: true,
+        };
+        const existingOverride = overrides.find(
+          (o) => o.templateId === occurrence.templateId && o.date === selectedDate
+        );
+        const updatedOverride: OccurrenceOverride = existingOverride
+          ? { ...existingOverride, dailyGoal: updatedGoal, updatedAt: Date.now() }
+          : {
+              id: `override_${occurrence.templateId}_${selectedDate}`,
+              templateId: occurrence.templateId,
+              date: selectedDate,
+              userId,
+              isCancelled: false,
+              isPostponed: false,
+              updatedAt: Date.now(),
+              dailyGoal: updatedGoal,
+            };
+        OverrideRepository.saveOverride(updatedOverride).then(() => {
+          setOverrides((prev) => {
+            const idx = prev.findIndex((o) => o.id === updatedOverride.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = updatedOverride;
+              return copy;
+            }
+            return [...prev, updatedOverride];
+          });
+        });
+      }
+    } else if (status === 'pending') {
+      // Revert completed routine & phase tasks from life goals
+      LifeGoalRepository.revertCompletedRoutineFromLifeGoals(
+        userId,
+        selectedDate,
+        occurrence.templateId,
+        occurrence.dailyGoal
+      ).then((updatedGoals) => {
+        if (updatedGoals.length > 0) {
+          setLifeGoals((prev) => {
+            const copy = [...prev];
+            for (const ug of updatedGoals) {
+              const idx = copy.findIndex((g) => g.id === ug.id);
+              if (idx >= 0) copy[idx] = ug;
+              else copy.push(ug);
+            }
+            return copy;
+          });
+          showToast(`Reverted routine from ${updatedGoals.length} life goal(s) ↩️`);
+        }
+      }).catch((err) => {
+        console.warn('Failed to revert routine from life goals:', err);
+      });
+
+      // Uncheck dailyGoal completion if attached
+      if (occurrence.dailyGoal?.isCompleted) {
+        const updatedGoal: DailyActivityGoal = {
+          ...occurrence.dailyGoal,
+          isCompleted: false,
+        };
+        const existingOverride = overrides.find(
+          (o) => o.templateId === occurrence.templateId && o.date === selectedDate
+        );
+        if (existingOverride) {
+          const updatedOverride: OccurrenceOverride = {
+            ...existingOverride,
+            dailyGoal: updatedGoal,
+            updatedAt: Date.now(),
+          };
+          OverrideRepository.saveOverride(updatedOverride).then(() => {
+            setOverrides((prev) => {
+              const idx = prev.findIndex((o) => o.id === updatedOverride.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = updatedOverride;
+                return copy;
+              }
+              return [...prev, updatedOverride];
+            });
+          });
+        }
+      }
     }
 
     const statusAction =
@@ -1179,6 +1272,148 @@ export default function RoutineApp() {
         ? 'Reset to pending'
         : `Marked as ${status.replace('_', ' ')}`;
     showToast(`${statusAction}: "${occurrence.title}"`);
+  };
+
+  // Daily Activity Goal Handlers
+  const handleOpenSetDailyGoal = (occurrence: ActivityOccurrence) => {
+    setDailyGoalOccurrence(occurrence);
+    setDailyGoalModalOpen(true);
+  };
+
+  const handleSaveDailyGoal = async (
+    occurrence: ActivityOccurrence,
+    dailyGoal: DailyActivityGoal | null
+  ) => {
+    const existingOverride = overrides.find(
+      (o) => o.templateId === occurrence.templateId && o.date === selectedDate
+    );
+
+    let updatedOverride: OccurrenceOverride;
+    if (existingOverride) {
+      updatedOverride = {
+        ...existingOverride,
+        dailyGoal: dailyGoal || undefined,
+        updatedAt: Date.now(),
+      };
+    } else {
+      updatedOverride = {
+        id: `override_${occurrence.templateId}_${selectedDate}`,
+        templateId: occurrence.templateId,
+        date: selectedDate,
+        userId,
+        isCancelled: false,
+        isPostponed: false,
+        updatedAt: Date.now(),
+        dailyGoal: dailyGoal || undefined,
+      };
+    }
+
+    await OverrideRepository.saveOverride(updatedOverride);
+    setOverrides((prev) => {
+      const idx = prev.findIndex((o) => o.id === updatedOverride.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedOverride;
+        return copy;
+      }
+      return [...prev, updatedOverride];
+    });
+
+    showToast(dailyGoal ? `Saved target for "${occurrence.title}" 🎯` : 'Daily target removed');
+  };
+
+  const handleToggleDailyGoal = async (occurrence: ActivityOccurrence) => {
+    if (!occurrence.dailyGoal) return;
+    const newIsCompleted = !occurrence.dailyGoal.isCompleted;
+    const updatedDailyGoal: DailyActivityGoal = {
+      ...occurrence.dailyGoal,
+      isCompleted: newIsCompleted,
+    };
+
+    const existingOverride = overrides.find(
+      (o) => o.templateId === occurrence.templateId && o.date === selectedDate
+    );
+    const updatedOverride: OccurrenceOverride = existingOverride
+      ? { ...existingOverride, dailyGoal: updatedDailyGoal, updatedAt: Date.now() }
+      : {
+          id: `override_${occurrence.templateId}_${selectedDate}`,
+          templateId: occurrence.templateId,
+          date: selectedDate,
+          userId,
+          isCancelled: false,
+          isPostponed: false,
+          updatedAt: Date.now(),
+          dailyGoal: updatedDailyGoal,
+        };
+
+    await OverrideRepository.saveOverride(updatedOverride);
+    setOverrides((prev) => {
+      const idx = prev.findIndex((o) => o.id === updatedOverride.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedOverride;
+        return copy;
+      }
+      return [...prev, updatedOverride];
+    });
+
+    if (newIsCompleted) {
+      showToast(`Completed target: "${occurrence.dailyGoal.text}" 🎯 ✓`);
+      if (occurrence.log?.status !== 'completed') {
+        const updatedOccurrenceWithGoal: ActivityOccurrence = {
+          ...occurrence,
+          dailyGoal: updatedDailyGoal,
+        };
+        await handleUpdateStatus(updatedOccurrenceWithGoal, 'completed');
+      } else {
+        const duration = occurrence.durationMinutes || calculateDuration(occurrence.startTime, occurrence.endTime);
+        const updatedGoals = await LifeGoalRepository.syncCompletedRoutineToLifeGoals(
+          userId,
+          selectedDate,
+          occurrence.templateId,
+          occurrence.title,
+          duration,
+          occurrence.log?.completionNotes || '',
+          {
+            isReplacement: occurrence.isReplacement,
+            linkedGoalId: occurrence.linkedGoalId,
+            replacesTemplateId: occurrence.replacesTemplateId,
+            isReplaced: occurrence.isReplaced,
+            dailyGoal: updatedDailyGoal,
+          }
+        );
+        if (updatedGoals.length > 0) {
+          setLifeGoals((prev) => {
+            const copy = [...prev];
+            for (const ug of updatedGoals) {
+              const idx = copy.findIndex((g) => g.id === ug.id);
+              if (idx >= 0) copy[idx] = ug;
+              else copy.push(ug);
+            }
+            return copy;
+          });
+        }
+      }
+    } else {
+      showToast(`Target unchecked: "${occurrence.dailyGoal.text}"`);
+      const updatedGoals = await LifeGoalRepository.revertCompletedRoutineFromLifeGoals(
+        userId,
+        selectedDate,
+        occurrence.templateId,
+        updatedDailyGoal
+      );
+      if (updatedGoals.length > 0) {
+        setLifeGoals((prev) => {
+          const copy = [...prev];
+          for (const ug of updatedGoals) {
+            const idx = copy.findIndex((g) => g.id === ug.id);
+            if (idx >= 0) copy[idx] = ug;
+            else copy.push(ug);
+          }
+          return copy;
+        });
+      }
+    }
   };
 
   // Step Checklist Toggle Handler
@@ -1988,6 +2223,8 @@ export default function RoutineApp() {
                 onDeleteComment={handleDeleteComment}
                 onOpenSpeedometer={() => setSpeedometerOpen(true)}
                 onOpenReplace={handleOpenReplace}
+                onSetDailyGoal={handleOpenSetDailyGoal}
+                onToggleDailyGoal={handleToggleDailyGoal}
               />
 
               {/* Schedule Timeline */}
@@ -2025,6 +2262,8 @@ export default function RoutineApp() {
                 onRecordGoalProgress={handleRecordGoalProgress}
                 onUndoLastGoalProgress={handleUndoLastGoalProgress}
                 onOpenReplace={handleOpenReplace}
+                onSetDailyGoal={handleOpenSetDailyGoal}
+                onToggleDailyGoal={handleToggleDailyGoal}
               />
             </>
           )}
@@ -2243,6 +2482,17 @@ export default function RoutineApp() {
             onClose={() => {
               setReplaceDialogOpen(false);
               setReplacingOccurrence(null);
+            }}
+          />
+
+          <SetDailyGoalModal
+            isOpen={dailyGoalModalOpen}
+            occurrence={dailyGoalOccurrence}
+            lifeGoals={lifeGoals}
+            onSaveDailyGoal={handleSaveDailyGoal}
+            onClose={() => {
+              setDailyGoalModalOpen(false);
+              setDailyGoalOccurrence(null);
             }}
           />
 

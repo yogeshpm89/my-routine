@@ -59,6 +59,8 @@ interface TodayTimelineProps {
   onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
   onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
   onOpenReplace?: (occurrence: ActivityOccurrence) => void;
+  onSetDailyGoal?: (occurrence: ActivityOccurrence) => void;
+  onToggleDailyGoal?: (occurrence: ActivityOccurrence) => void;
   lifeGoals?: LifeGoal[];
   onSwitchToGoals?: () => void;
   activeDayTemplate?: DayRoutineTemplate | null;
@@ -109,6 +111,8 @@ export function TodayTimeline({
   onRecordGoalProgress,
   onUndoLastGoalProgress,
   onOpenReplace,
+  onSetDailyGoal,
+  onToggleDailyGoal,
 }: TodayTimelineProps) {
   const [currentTime, setCurrentTime] = useState<string>('08:00');
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'skipped'>('all');
@@ -595,6 +599,8 @@ export function TodayTimeline({
                         onUpdateComment={onUpdateComment}
                         onDeleteComment={onDeleteComment}
                         onOpenReplace={onOpenReplace}
+                        onSetDailyGoal={onSetDailyGoal}
+                        onToggleDailyGoal={onToggleDailyGoal}
                       />
                     );
                   })}
@@ -672,6 +678,8 @@ export function TodayTimeline({
                               onUpdateComment={onUpdateComment}
                               onDeleteComment={onDeleteComment}
                               onOpenReplace={onOpenReplace}
+                        onSetDailyGoal={onSetDailyGoal}
+                        onToggleDailyGoal={onToggleDailyGoal}
                             />
                           );
                         })}
@@ -706,6 +714,8 @@ export function TodayTimeline({
                     onUpdateComment={onUpdateComment}
                     onDeleteComment={onDeleteComment}
                     onOpenReplace={onOpenReplace}
+                    onSetDailyGoal={onSetDailyGoal}
+                    onToggleDailyGoal={onToggleDailyGoal}
                   />
                 );
               })}

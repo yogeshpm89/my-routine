@@ -98,6 +98,13 @@ export function generateDailyOccurrences(
     const completedStepIds = log?.completedStepIds ?? [];
     const comments = log?.comments ?? [];
 
+    const rawDailyGoal = override?.dailyGoal ?? log?.dailyGoal;
+    let dailyGoal = rawDailyGoal ? { ...rawDailyGoal } : undefined;
+    if (dailyGoal && log?.status === 'completed' && !dailyGoal.isCompleted) {
+      dailyGoal.isCompleted = true;
+      dailyGoal.completedAt = dailyGoal.completedAt || Date.now();
+    }
+
     // Synthesize log for replaced original block if no explicit log exists
     let effectiveLog = log;
     if (isReplaced) {
@@ -141,6 +148,7 @@ export function generateDailyOccurrences(
       steps,
       completedStepIds,
       comments,
+      dailyGoal,
       aiActionId: template.aiActionId,
       hasOverride: Boolean(override),
       isCancelled: false,
