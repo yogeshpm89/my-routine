@@ -26,6 +26,7 @@ import {
   FileText,
   ExternalLink,
   ArrowLeftRight,
+  Target,
 } from 'lucide-react';
 import { YouTubeIcon as Youtube } from '@/components/media/youtube-icon';
 import { MusicServiceIcon } from '@/components/media/music-service-icons';
@@ -49,6 +50,8 @@ interface ActivityTimelineItemProps {
   onExecuteAi?: (occurrence: ActivityOccurrence) => void;
   onToggleStep?: (occurrence: ActivityOccurrence, stepId: string) => void;
   onOpenReplace?: (occurrence: ActivityOccurrence) => void;
+  onSetDailyGoal?: (occurrence: ActivityOccurrence) => void;
+  onToggleDailyGoal?: (occurrence: ActivityOccurrence) => void;
   onAddComment?: (occurrence: ActivityOccurrence, text: string) => Promise<void> | void;
   onUpdateComment?: (occurrence: ActivityOccurrence, commentId: string, text: string) => Promise<void> | void;
   onDeleteComment?: (occurrence: ActivityOccurrence, commentId: string) => Promise<void> | void;
@@ -65,6 +68,8 @@ export function ActivityTimelineItem({
   onExecuteAi,
   onToggleStep,
   onOpenReplace,
+  onSetDailyGoal,
+  onToggleDailyGoal,
   onAddComment,
   onUpdateComment,
   onDeleteComment,
@@ -430,6 +435,87 @@ export function ActivityTimelineItem({
                   })}
                 </div>
               )}
+
+              {/* Daily Activity Goal Section */}
+              {occurrence.dailyGoal ? (
+                <div className="mt-2 p-2 sm:p-2.5 rounded-xl bg-gradient-to-r from-blue-950/60 to-indigo-950/40 border border-blue-500/30 flex items-center justify-between gap-2 shadow-sm">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleDailyGoal?.(occurrence)}
+                      className={cn(
+                        'w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                        occurrence.dailyGoal.isCompleted
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                          : 'border-blue-400/80 bg-blue-950/40 text-blue-300 hover:border-emerald-400'
+                      )}
+                      title={occurrence.dailyGoal.isCompleted ? 'Goal completed! Click to mark incomplete' : 'Click to complete goal'}
+                    >
+                      {occurrence.dailyGoal.isCompleted ? (
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      ) : (
+                        <Target className="w-3 h-3 text-blue-400" />
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                          <Target className="w-3 h-3" /> Today&apos;s Goal:
+                        </span>
+                        {occurrence.dailyGoal.lifeGoalTitle && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium truncate max-w-[170px]" title={`Contributing to ${occurrence.dailyGoal.lifeGoalTitle}`}>
+                            {occurrence.dailyGoal.lifeGoalTitle}
+                          </span>
+                        )}
+                        {occurrence.dailyGoal.phaseTitle && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[130px]">
+                            &bull; {occurrence.dailyGoal.phaseTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        onClick={() => onSetDailyGoal?.(occurrence)}
+                        className={cn(
+                          'text-xs font-semibold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors truncate mt-0.5',
+                          occurrence.dailyGoal.isCompleted && 'line-through text-slate-400 font-normal'
+                        )}
+                        title="Click to edit daily goal"
+                      >
+                        {occurrence.dailyGoal.text}
+                        {occurrence.dailyGoal.targetUnits && (
+                          <span className="text-[11px] text-slate-300 font-normal ml-1">
+                            ({occurrence.dailyGoal.targetUnits} {occurrence.dailyGoal.unitLabel || 'units'})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onSetDailyGoal?.(occurrence)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-blue-950/40 transition shrink-0 cursor-pointer"
+                    title="Edit daily goal"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                !isCompleted && !isSkipped && !isReplaced && (
+                  <div className="pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => onSetDailyGoal?.(occurrence)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-blue-300 bg-slate-800/40 hover:bg-slate-800/80 border border-white/5 px-2 py-0.5 rounded-lg transition active:scale-95 cursor-pointer"
+                      title="Set a specific goal or milestone for today's session"
+                    >
+                      <Target className="w-3 h-3 text-blue-400" />
+                      <span>+ Set Goal</span>
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           </div>
 
@@ -513,6 +599,20 @@ export function ActivityTimelineItem({
                   {allComments.length}
                 </span>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSetDailyGoal?.(occurrence)}
+              title={occurrence.dailyGoal ? "Edit today's goal" : "Set goal for today's activity"}
+              className={cn(
+                'min-w-[36px] min-h-[36px] p-2 rounded-xl transition flex items-center justify-center active:scale-95 cursor-pointer',
+                occurrence.dailyGoal
+                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
+                  : 'text-slate-400 hover:text-blue-300 hover:bg-slate-800'
+              )}
+            >
+              <Target className="w-3.5 h-3.5" />
             </button>
 
             {!isReplaced && onOpenReplace && (

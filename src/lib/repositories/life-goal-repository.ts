@@ -13,6 +13,7 @@ import {
   GoalExperienceEntry,
   GoalMilestone,
 } from '@/types/goals';
+import { DailyActivityGoal } from '@/types/routine';
 import { getInitialLifeGoals } from '@/lib/seed-goals';
 import { getTodayDateString } from '@/lib/time-utils';
 import { db, canSyncWithFirestore, cleanForFirestore } from '@/lib/firebase/config';
@@ -1498,6 +1499,7 @@ export class LifeGoalRepository {
       linkedGoalId?: string;
       replacesTemplateId?: string;
       isReplaced?: boolean;
+      dailyGoal?: DailyActivityGoal;
     }
   ): Promise<LifeGoal[]> {
     if (options?.isReplaced) {
@@ -1517,19 +1519,247 @@ export class LifeGoalRepository {
       matchingGoals = all.filter((g) => g.linkedTemplateIds?.includes(templateId));
     }
 
+    // Also include explicit LifeGoal from dailyGoal if not already present
+    if (options?.dailyGoal?.lifeGoalId) {
+      const explicitGoal = all.find((g) => g.id === options.dailyGoal!.lifeGoalId);
+      if (explicitGoal && !matchingGoals.some((g) => g.id === explicitGoal.id)) {
+        matchingGoals.push(explicitGoal);
+      }
+    }
+
     if (matchingGoals.length === 0) return [];
 
     const updatedGoals: LifeGoal[] = [];
     for (const g of matchingGoals) {
-      const updated = await this.recordActivityForGoal(userId, g.id, {
+      let targetGoal = g;
+      const dg = options?.dailyGoal;
+      const isTargetOfDailyGoal = Boolean(
+        dg && (dg.lifeGoalId === g.id || (!dg.lifeGoalId && g.linkedTemplateIds?.includes(templateId)))
+      );
+
+      let dailyGoalHandled = false;
+
+      // 1. If dailyGoal specifies a Roadmap Phase Task
+      if (isTargetOfDailyGoal && dg?.phaseId && dg?.phaseTaskId) {
+        let stepNowDone = false;
+        let phaseTitle = dg.phaseTitle || '';
+        let stepTitle = dg.text;
+
+        const updatedPhases = (targetGoal.phases || []).map((p) => {
+          if (p.id === dg.phaseId) {
+            phaseTitle = p.title || phaseTitle;
+            const nextTasks = (p.tasks || []).map((t) => {
+              if (t.id === dg.phaseTaskId) {
+                stepTitle = t.text || stepTitle;
+                stepNowDone = true;
+                return {
+                  ...t,
+                  isCompleted: true,
+                  completedAt: t.completedAt || Date.now(),
+                };
+              }
+              return t;
+            });
+
+            const allTasksDone = nextTasks.length > 0 && nextTasks.every((t) => t.isCompleted);
+            return {
+              ...p,
+              tasks: nextTasks,
+              status: (allTasksDone ? 'completed' : 'in_progress') as GoalPhase['status'],
+              completedAt: allTasksDone ? (p.completedAt || Date.now()) : undefined,
+            };
+          }
+          return p;
+        });
+
+        if (stepNowDone) {
+          const logEntry: GoalProgressLog = {
+            id: `plog_dgoal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            date,
+            valueChange: 1,
+            currentValue: (targetGoal.currentValue || 0) + 1,
+            note: `Completed daily goal: ${stepTitle}${phaseTitle ? ` (${phaseTitle})` : ''}`,
+            phaseId: dg.phaseId,
+            phaseTitle,
+            stepId: dg.phaseTaskId,
+            stepTitle,
+            createdAt: Date.now(),
+          };
+
+          targetGoal = {
+            ...targetGoal,
+            phases: updatedPhases,
+            progressLogs: [logEntry, ...(targetGoal.progressLogs || [])],
+            updatedAt: Date.now(),
+          };
+          targetGoal = this.recalculateGoalProgress(targetGoal);
+          dailyGoalHandled = true;
+        }
+      }
+
+      // 2. If dailyGoal specifies a Tracked Item
+      if (isTargetOfDailyGoal && dg?.itemId && !dailyGoalHandled) {
+        const deltaUnits = dg.targetUnits || 1;
+        const updatedItems = (targetGoal.items || []).map((item) => {
+          if (item.id === dg.itemId) {
+            const newUnits = Number(((item.currentUnits || 0) + deltaUnits).toFixed(2));
+            const isDone = item.totalUnits > 0 && newUnits >= item.totalUnits;
+            return {
+              ...item,
+              currentUnits: newUnits,
+              status: (isDone ? 'completed' : 'in_progress') as GoalTrackedItem['status'],
+              completedAt: isDone ? (item.completedAt || Date.now()) : undefined,
+              updatedAt: Date.now(),
+            };
+          }
+          return item;
+        });
+
+        const logEntry: GoalProgressLog = {
+          id: `plog_item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          date,
+          valueChange: deltaUnits,
+          currentValue: targetGoal.currentValue,
+          note: `Completed daily goal: ${dg.text}`,
+          itemId: dg.itemId,
+          itemTitle: dg.itemTitle,
+          unitLabel: dg.unitLabel,
+          createdAt: Date.now(),
+        };
+
+        targetGoal = {
+          ...targetGoal,
+          items: updatedItems,
+          progressLogs: [logEntry, ...(targetGoal.progressLogs || [])],
+          updatedAt: Date.now(),
+        };
+        targetGoal = this.recalculateGoalProgress(targetGoal);
+        dailyGoalHandled = true;
+      }
+
+      // 3. If dailyGoal specifies a Numeric Metric target
+      if (isTargetOfDailyGoal && dg?.targetUnits && targetGoal.trackingMode === 'metric' && !dailyGoalHandled) {
+        const delta = dg.targetUnits;
+        const newCurrent = Number(((targetGoal.currentValue || 0) + delta).toFixed(2));
+        const isGoalDone = targetGoal.targetValue > 0 && newCurrent >= targetGoal.targetValue;
+
+        const logEntry: GoalProgressLog = {
+          id: `plog_metric_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          date,
+          valueChange: delta,
+          currentValue: newCurrent,
+          note: `Completed daily goal: ${dg.text} (+${delta} ${dg.unitLabel || targetGoal.unit})`,
+          createdAt: Date.now(),
+        };
+
+        targetGoal = {
+          ...targetGoal,
+          currentValue: newCurrent,
+          status: isGoalDone ? 'completed' : targetGoal.status,
+          progressLogs: [logEntry, ...(targetGoal.progressLogs || [])],
+          updatedAt: Date.now(),
+        };
+        dailyGoalHandled = true;
+      }
+
+      // 4. Save goal state if changed by structured dailyGoal
+      if (dailyGoalHandled) {
+        await this.saveGoal(targetGoal);
+      }
+
+      // 5. Append Activity Record
+      const activityNotes = dg?.text
+        ? (notes ? `${notes} • Goal: ${dg.text}` : `Goal: ${dg.text}`)
+        : notes;
+
+      const incrementProgress = !dailyGoalHandled && Boolean(targetGoal.autoTrackFromActivities);
+
+      const updated = await this.recordActivityForGoal(userId, targetGoal.id, {
         date,
         activityTitle: templateTitle,
         durationMinutes,
-        notes,
+        notes: activityNotes,
         templateId,
-        incrementProgress: Boolean(g.autoTrackFromActivities),
+        incrementProgress,
       });
+
       if (updated) updatedGoals.push(updated);
+    }
+    return updatedGoals;
+  }
+
+  static async revertCompletedRoutineFromLifeGoals(
+    userId: string,
+    date: string,
+    templateId: string,
+    dailyGoal?: DailyActivityGoal
+  ): Promise<LifeGoal[]> {
+    const all = this.getLocalLifeGoals(userId);
+    let matchingGoals: LifeGoal[] = [];
+
+    if (dailyGoal?.lifeGoalId) {
+      const g = all.find((item) => item.id === dailyGoal.lifeGoalId);
+      if (g) matchingGoals.push(g);
+    }
+    const templateGoals = all.filter((g) => g.linkedTemplateIds?.includes(templateId));
+    for (const tg of templateGoals) {
+      if (!matchingGoals.some((m) => m.id === tg.id)) matchingGoals.push(tg);
+    }
+
+    if (matchingGoals.length === 0) return [];
+
+    const updatedGoals: LifeGoal[] = [];
+    for (const g of matchingGoals) {
+      let targetGoal = g;
+
+      if (dailyGoal?.phaseId && dailyGoal?.phaseTaskId) {
+        const nextPhases = (targetGoal.phases || []).map((p) => {
+          if (p.id === dailyGoal.phaseId) {
+            const nextTasks = (p.tasks || []).map((t) => {
+              if (t.id === dailyGoal.phaseTaskId && t.isCompleted) {
+                return {
+                  ...t,
+                  isCompleted: false,
+                  completedAt: undefined,
+                };
+              }
+              return t;
+            });
+            const anyTaskDone = nextTasks.some((t) => t.isCompleted);
+            return {
+              ...p,
+              tasks: nextTasks,
+              status: (anyTaskDone ? 'in_progress' : 'not_started') as GoalPhase['status'],
+              completedAt: undefined,
+            };
+          }
+          return p;
+        });
+
+        const nextLogs = (targetGoal.progressLogs || []).filter(
+          (l) => !(l.date === date && l.stepId === dailyGoal.phaseTaskId)
+        );
+
+        targetGoal = {
+          ...targetGoal,
+          phases: nextPhases,
+          progressLogs: nextLogs,
+          updatedAt: Date.now(),
+        };
+        targetGoal = this.recalculateGoalProgress(targetGoal);
+      }
+
+      const nextRecords = (targetGoal.activityRecords || []).filter(
+        (ar) => !(ar.date === date && ar.templateId === templateId)
+      );
+      targetGoal = {
+        ...targetGoal,
+        activityRecords: nextRecords,
+        updatedAt: Date.now(),
+      };
+
+      const saved = await this.saveGoal(targetGoal);
+      if (saved) updatedGoals.push(saved);
     }
     return updatedGoals;
   }
